@@ -1,0 +1,51 @@
+name: Merge Developer Memories
+on:
+  push:
+    paths:
+      - 'contributions/**/*.json'
+  workflow_dispatch:
+
+concurrency:
+  group: merge-memories
+  cancel-in-progress: false
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install claude-mem-sync
+        run: bun install -g claude-mem-sync
+
+      - name: Merge new contributions
+        run: |
+          mem-sync ci-merge \
+            --contributions-dir contributions/ \
+            --output-dir merged/ \
+            --state-file .merge-state.json \
+            --cap 500
+
+      - name: Commit merged memories
+        run: |
+          git config user.name "mem-sync-bot"
+          git config user.email "mem-sync-bot@users.noreply.github.com"
+          git add merged/ .merge-state.json
+          git diff --cached --quiet || git commit -m "chore: merge developer memories [mem-sync]"
+          git pull --rebase || true
+          git push
+
+      - name: Cleanup old contributions (optional, keep last 30 days)
+        run: |
+          find contributions/ -name "*.json" -mtime +30 -delete
+          git add contributions/
+          git diff --cached --quiet || git commit -m "chore: cleanup old contribution files [mem-sync]"
+          git push

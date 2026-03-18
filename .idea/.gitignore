@@ -1,0 +1,52 @@
+# Default ignored files
+/shelf/
+/workspace.xml
+# Ignored default folder with query files
+/queries/
+# Datasource local storage ignored files
+/dataSources/
+/dataSources.local.xml
+# Editor-based HTTP Client requests
+/httpRequests/
+
+# prod
+dist/
+
+# dev
+.yarn/
+!.yarn/releases
+.vscode/*
+!.vscode/launch.json
+!.vscode/*.code-snippets
+# IDE
+.idea/
+
+# deps
+node_modules/
+.wrangler
+
+# env
+.env
+.env
+.dev.vars
+!.env.*.example
+
+# logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# misc
+.DS_Store
+/src/compiled_templates/
+/drizzle/meta/
+
+# TypeScript build cache
+*.tsbuildinfo
+
+# Claude Code local settings
+.claude/settings.local.json

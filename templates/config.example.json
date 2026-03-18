@@ -1,0 +1,33 @@
+{
+  "$schema": "../config.schema.json",
+  "global": {
+    "devName": "your-name",
+    "evictionStrategy": "passive",
+    "evictionKeepTagged": ["#keep"],
+    "maintenanceSchedule": "monthly",
+    "maintenancePruneOlderThanDays": 90,
+    "maintenancePruneScoreThreshold": 0.3,
+    "mergeCapPerProject": 500,
+    "exportSchedule": "friday:16:00",
+    "logLevel": "info",
+    "claudeMemDbPath": "~/.claude-mem/claude-mem.db"
+  },
+  "projects": {
+    "my-project": {
+      "enabled": true,
+      "memProject": "my-project",
+      "remote": {
+        "type": "github",
+        "repo": "my-org/dev-memories",
+        "branch": "main",
+        "autoMerge": true
+      },
+      "export": {
+        "types": ["decision", "bugfix", "discovery"],
+        "keywords": [],
+        "tags": ["#shared"],
+        "schedule": "friday:16:00"
+      }
+    }
+  }
+}
