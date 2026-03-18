@@ -1,0 +1,70 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "claude-mem-sync configuration",
+  "type": "object",
+  "required": ["global", "projects"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "global": {
+      "type": "object",
+      "required": ["devName"],
+      "properties": {
+        "devName": { "type": "string", "minLength": 1, "description": "Developer identifier used in contribution paths" },
+        "evictionStrategy": { "type": "string", "enum": ["hook", "passive"], "default": "passive" },
+        "evictionKeepTagged": { "type": "array", "items": { "type": "string" }, "default": ["#keep"] },
+        "maintenanceSchedule": { "type": "string", "enum": ["weekly", "biweekly", "monthly"], "default": "monthly" },
+        "maintenancePruneOlderThanDays": { "type": "integer", "minimum": 1, "default": 90 },
+        "maintenancePruneScoreThreshold": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.3 },
+        "mergeCapPerProject": { "type": "integer", "minimum": 1, "default": 500 },
+        "exportSchedule": { "type": "string", "default": "friday:16:00" },
+        "logLevel": { "type": "string", "enum": ["debug", "info", "warn", "error"], "default": "info" },
+        "claudeMemDbPath": { "type": "string", "default": "~/.claude-mem/claude-mem.db" }
+      }
+    },
+    "projects": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["remote"],
+        "properties": {
+          "enabled": { "type": "boolean", "default": true },
+          "memProject": { "type": "string" },
+          "remote": {
+            "type": "object",
+            "required": ["repo"],
+            "properties": {
+              "type": { "type": "string", "enum": ["github"], "default": "github" },
+              "repo": { "type": "string", "minLength": 1, "description": "GitHub repo in owner/name format" },
+              "branch": { "type": "string", "default": "main" },
+              "autoMerge": { "type": "boolean", "default": true }
+            }
+          },
+          "export": {
+            "type": "object",
+            "properties": {
+              "types": { "type": "array", "items": { "type": "string" }, "default": [] },
+              "keywords": { "type": "array", "items": { "type": "string" }, "default": [] },
+              "tags": { "type": "array", "items": { "type": "string" }, "default": [] },
+              "schedule": { "type": "string", "default": "friday:16:00" }
+            }
+          },
+          "eviction": {
+            "type": "object",
+            "properties": {
+              "strategy": { "type": "string", "enum": ["hook", "passive"] },
+              "accessWindowMonths": { "type": "integer", "minimum": 1, "default": 6 },
+              "scoring": {
+                "type": "object",
+                "properties": {
+                  "typeWeight": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.3 },
+                  "recencyWeight": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.2 },
+                  "thirdWeight": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.5 }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
