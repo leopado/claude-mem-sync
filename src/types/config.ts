@@ -32,10 +32,11 @@ export const ExportConfigSchema = z.object({
 });
 
 export const RemoteConfigSchema = z.object({
-  type: z.literal("github").default("github"),
+  type: z.enum(["github", "gitlab", "bitbucket"]).default("github"),
   repo: z.string().min(1),
   branch: z.string().default("main"),
   autoMerge: z.boolean().default(true),
+  host: z.string().optional(),
 });
 
 export const ProjectConfigSchema = z.object({

@@ -72,11 +72,21 @@ export default async function run(_args: ParsedArgs): Promise<void> {
       }
 
       const memProject = await ask("memProject name in DB", projectName);
+      const providerAnswer = await ask("Git provider (github/gitlab/bitbucket)", "github");
+      const providerType = (["github", "gitlab", "bitbucket"].includes(providerAnswer.toLowerCase())
+        ? providerAnswer.toLowerCase()
+        : "github") as "github" | "gitlab" | "bitbucket";
+
       const repo = await ask("Remote repo (owner/name)");
       if (!repo) {
         console.log("  Skipping — remote repo is required.");
         continue;
       }
+
+      const hostAnswer = providerType !== "github"
+        ? await ask(`Host (leave blank for ${providerType}.com)`)
+        : "";
+      const host = hostAnswer || undefined;
 
       const autoMergeAnswer = await ask("Merge strategy: auto-merge or PR review?", "auto");
       const autoMerge = autoMergeAnswer.toLowerCase() !== "pr" && autoMergeAnswer.toLowerCase() !== "pr review";
@@ -96,10 +106,11 @@ export default async function run(_args: ParsedArgs): Promise<void> {
         enabled: true,
         memProject: memProject !== projectName ? memProject : undefined,
         remote: {
-          type: "github" as const,
+          type: providerType,
           repo,
           branch: "main",
           autoMerge,
+          ...(host ? { host } : {}),
         },
         export: {
           types,

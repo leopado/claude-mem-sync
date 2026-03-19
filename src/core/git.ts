@@ -3,11 +3,24 @@ import { join } from "path";
 import { randomBytes } from "crypto";
 import { spawnCommand } from "./compat";
 import { logger } from "./logger";
+import type { RemoteConfig } from "../types/config";
 
-/**
- * Internal helper — runs a command via array args (no shell)
- * and returns stdout + stderr as strings. Throws on non-zero exit.
- */
+// ── Provider URL construction ─────────────────────────────────────────
+
+const DEFAULT_HOSTS: Record<string, string> = {
+  github: "github.com",
+  gitlab: "gitlab.com",
+  bitbucket: "bitbucket.org",
+};
+
+/** Build the HTTPS clone URL for a given provider + repo. */
+export function buildCloneUrl(remote: RemoteConfig): string {
+  const host = remote.host ?? DEFAULT_HOSTS[remote.type] ?? DEFAULT_HOSTS.github;
+  return `https://${host}/${remote.repo}.git`;
+}
+
+// ── Internal helpers ──────────────────────────────────────────────────
+
 async function runCommand(
   cmd: string[],
   options: { cwd?: string } = {},
@@ -25,30 +38,30 @@ async function runCommand(
   return { stdout: result.stdout, stderr: result.stderr };
 }
 
+// ── Clone / pull / push ───────────────────────────────────────────────
+
 /**
- * Shallow-clone a GitHub repo into a temp directory.
- * Returns the absolute path to the cloned directory.
+ * Shallow-clone a repo into a temp directory.
+ * Supports GitHub, GitLab, and Bitbucket (including self-hosted).
  */
-export async function shallowClone(repo: string, branch: string): Promise<string> {
+export async function shallowClone(remote: RemoteConfig): Promise<string> {
   const suffix = randomBytes(8).toString("hex");
   const tempDir = join(tmpdir(), `claude-mem-sync-${suffix}`);
-  const url = `https://github.com/${repo}.git`;
+  const url = buildCloneUrl(remote);
 
-  logger.info("Shallow-cloning repo", { repo, branch, dest: tempDir });
+  logger.info("Shallow-cloning repo", { provider: remote.type, repo: remote.repo, dest: tempDir });
 
-  await runCommand(["git", "clone", "--depth", "1", "--branch", branch, url, tempDir]);
+  await runCommand(["git", "clone", "--depth", "1", "--branch", remote.branch, url, tempDir]);
 
   logger.info("Clone complete", { dest: tempDir });
   return tempDir;
 }
 
-/** Pull latest changes in the given repo directory. */
 export async function gitPull(repoDir: string): Promise<void> {
   logger.info("Pulling latest changes", { repoDir });
   await runCommand(["git", "pull"], { cwd: repoDir });
 }
 
-/** Stage the specified files. */
 export async function gitAdd(repoDir: string, files: string[]): Promise<void> {
   if (files.length === 0) {
     logger.warn("gitAdd called with empty file list — skipping");
@@ -58,66 +71,147 @@ export async function gitAdd(repoDir: string, files: string[]): Promise<void> {
   await runCommand(["git", "add", ...files], { cwd: repoDir });
 }
 
-/** Create a commit with the given message. */
 export async function gitCommit(repoDir: string, message: string): Promise<void> {
   logger.info("Creating commit", { repoDir, message });
   await runCommand(["git", "commit", "-m", message], { cwd: repoDir });
 }
 
-/** Push to the tracked remote branch. */
 export async function gitPush(repoDir: string): Promise<void> {
   logger.info("Pushing to remote", { repoDir });
   await runCommand(["git", "push"], { cwd: repoDir });
 }
 
-/** Create and checkout a new branch. */
 export async function gitCheckoutNewBranch(repoDir: string, branchName: string): Promise<void> {
   logger.info("Creating and checking out branch", { repoDir, branchName });
   await runCommand(["git", "checkout", "-b", branchName], { cwd: repoDir });
 }
 
-/** Push the branch and set upstream tracking. */
 export async function gitPushUpstream(repoDir: string, branchName: string): Promise<void> {
   logger.info("Pushing with upstream tracking", { repoDir, branchName });
   await runCommand(["git", "push", "-u", "origin", branchName], { cwd: repoDir });
 }
 
+// ── Pull/Merge Request creation ───────────────────────────────────────
+
 /**
- * Create a pull request via the GitHub CLI (`gh`).
- * Returns the URL of the newly created PR.
+ * Create a pull/merge request. Provider-aware:
+ * - GitHub: uses `gh pr create`
+ * - GitLab: uses `glab mr create`
+ * - Bitbucket: uses Bitbucket REST API via curl
  */
 export async function createPullRequest(
   repoDir: string,
   title: string,
   body: string,
+  remote: RemoteConfig,
 ): Promise<string> {
-  logger.info("Creating pull request", { repoDir, title });
+  switch (remote.type) {
+    case "github":
+      return createGitHubPR(repoDir, title, body);
+    case "gitlab":
+      return createGitLabMR(repoDir, title, body);
+    case "bitbucket":
+      return createBitbucketPR(repoDir, title, body, remote);
+    default:
+      throw new Error(`Unsupported provider: ${remote.type}`);
+  }
+}
 
+async function createGitHubPR(repoDir: string, title: string, body: string): Promise<string> {
+  logger.info("Creating GitHub pull request", { repoDir, title });
   const { stdout } = await runCommand(
     ["gh", "pr", "create", "--title", title, "--body", body],
     { cwd: repoDir },
   );
-
   const prUrl = stdout.trim();
   logger.info("Pull request created", { url: prUrl });
   return prUrl;
 }
 
-/** Returns true if there are staged changes ready to commit. */
-export async function hasStagedChanges(repoDir: string): Promise<boolean> {
-  logger.debug("Checking for staged changes", { repoDir });
-  const result = await spawnCommand(["git", "diff", "--cached", "--quiet"], { cwd: repoDir });
-  // exit 0 = no staged changes, exit 1 = there are staged changes
-  return result.exitCode !== 0;
+async function createGitLabMR(repoDir: string, title: string, body: string): Promise<string> {
+  logger.info("Creating GitLab merge request", { repoDir, title });
+  const { stdout } = await runCommand(
+    ["glab", "mr", "create", "--title", title, "--description", body, "--yes"],
+    { cwd: repoDir },
+  );
+  const mrUrl = stdout.trim();
+  logger.info("Merge request created", { url: mrUrl });
+  return mrUrl;
 }
 
-/** Returns true if the `gh` CLI is available on the system. */
-export async function checkGhCli(): Promise<boolean> {
-  logger.debug("Checking for gh CLI availability");
+async function createBitbucketPR(
+  repoDir: string,
+  title: string,
+  body: string,
+  remote: RemoteConfig,
+): Promise<string> {
+  logger.info("Creating Bitbucket pull request via REST API", { repoDir, title });
+
+  // Get current branch name
+  const { stdout: branchName } = await runCommand(
+    ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+    { cwd: repoDir },
+  );
+
+  const host = remote.host ?? "api.bitbucket.org";
+  const apiHost = host === "bitbucket.org" ? "api.bitbucket.org" : host;
+  const apiUrl = `https://${apiHost}/2.0/repositories/${remote.repo}/pullrequests`;
+
+  const payload = JSON.stringify({
+    title,
+    description: body,
+    source: { branch: { name: branchName.trim() } },
+    destination: { branch: { name: remote.branch } },
+  });
+
+  const { stdout } = await runCommand([
+    "curl", "-s", "-X", "POST",
+    "-H", "Content-Type: application/json",
+    "-H", "Authorization: Bearer ${BITBUCKET_TOKEN}",
+    "-d", payload,
+    apiUrl,
+  ], { cwd: repoDir });
+
+  // Parse response to extract PR URL
   try {
-    const result = await spawnCommand(["gh", "--version"]);
+    const response = JSON.parse(stdout);
+    const prUrl = response.links?.html?.href ?? response.links?.self?.href ?? `${apiUrl} (created)`;
+    logger.info("Bitbucket pull request created", { url: prUrl });
+    return prUrl;
+  } catch {
+    logger.warn("Could not parse Bitbucket API response, PR may have been created");
+    return `${apiUrl} (check Bitbucket)`;
+  }
+}
+
+// ── CLI availability checks ───────────────────────────────────────────
+
+/** Check if the required CLI tool is available for the given provider. */
+export async function checkProviderCli(providerType: string): Promise<boolean> {
+  const cmd = providerType === "gitlab" ? "glab" : providerType === "bitbucket" ? "curl" : "gh";
+  logger.debug(`Checking for ${cmd} CLI availability`);
+  try {
+    const result = await spawnCommand([cmd, "--version"]);
     return result.exitCode === 0;
   } catch {
     return false;
   }
+}
+
+/** Returns the CLI tool name and install URL for the given provider. */
+export function getProviderCliInfo(providerType: string): { name: string; url: string } {
+  switch (providerType) {
+    case "gitlab":
+      return { name: "GitLab CLI (glab)", url: "https://gitlab.com/gitlab-org/cli" };
+    case "bitbucket":
+      return { name: "curl", url: "https://curl.se/" };
+    default:
+      return { name: "GitHub CLI (gh)", url: "https://cli.github.com/" };
+  }
+}
+
+export async function hasStagedChanges(repoDir: string): Promise<boolean> {
+  logger.debug("Checking for staged changes", { repoDir });
+  const result = await spawnCommand(["git", "diff", "--cached", "--quiet"], { cwd: repoDir });
+  return result.exitCode !== 0;
 }

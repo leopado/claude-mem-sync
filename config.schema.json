@@ -33,10 +33,11 @@
             "type": "object",
             "required": ["repo"],
             "properties": {
-              "type": { "type": "string", "enum": ["github"], "default": "github" },
-              "repo": { "type": "string", "minLength": 1, "description": "GitHub repo in owner/name format" },
+              "type": { "type": "string", "enum": ["github", "gitlab", "bitbucket"], "default": "github" },
+              "repo": { "type": "string", "minLength": 1, "description": "Repo in owner/name format" },
               "branch": { "type": "string", "default": "main" },
-              "autoMerge": { "type": "boolean", "default": true }
+              "autoMerge": { "type": "boolean", "default": true },
+              "host": { "type": "string", "description": "Custom host for self-hosted instances (e.g., git.company.com)" }
             }
           },
           "export": {

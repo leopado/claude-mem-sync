@@ -1,0 +1,45 @@
+# Bitbucket Pipelines config for merging developer memories
+# Copy this file to bitbucket-pipelines.yml in your shared memories repository
+
+pipelines:
+  custom:
+    merge-memories:
+      - step:
+          name: Merge developer memories
+          image: oven/bun:latest
+          script:
+            - bun install -g claude-mem-sync
+            - mem-sync ci-merge
+                --contributions-dir contributions/
+                --output-dir merged/
+                --state-file .merge-state.json
+                --cap 500
+                --retention-days 30
+            - git config user.name "mem-sync-bot"
+            - git config user.email "mem-sync-bot@noreply.bitbucket.org"
+            - git add merged/ .merge-state.json contributions/
+            - git diff --cached --quiet || git commit -m "chore: merge developer memories [mem-sync]"
+            - git push
+
+  branches:
+    main:
+      - step:
+          name: Auto-merge on contribution push
+          image: oven/bun:latest
+          condition:
+            changesets:
+              includePaths:
+                - "contributions/**/*.json"
+          script:
+            - bun install -g claude-mem-sync
+            - mem-sync ci-merge
+                --contributions-dir contributions/
+                --output-dir merged/
+                --state-file .merge-state.json
+                --cap 500
+                --retention-days 30
+            - git config user.name "mem-sync-bot"
+            - git config user.email "mem-sync-bot@noreply.bitbucket.org"
+            - git add merged/ .merge-state.json contributions/
+            - git diff --cached --quiet || git commit -m "chore: merge developer memories [mem-sync]"
+            - git push

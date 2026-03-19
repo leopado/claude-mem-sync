@@ -1,0 +1,26 @@
+# GitLab CI pipeline for merging developer memories
+# Copy this file to .gitlab-ci.yml in your shared memories repository
+
+stages:
+  - merge
+
+merge-memories:
+  stage: merge
+  image: oven/bun:latest
+  rules:
+    - changes:
+        - contributions/**/*.json
+    - when: manual
+  script:
+    - bun install -g claude-mem-sync
+    - mem-sync ci-merge
+        --contributions-dir contributions/
+        --output-dir merged/
+        --state-file .merge-state.json
+        --cap 500
+        --retention-days 30
+    - git config user.name "mem-sync-bot"
+    - git config user.email "mem-sync-bot@noreply.gitlab.com"
+    - git add merged/ .merge-state.json contributions/
+    - git diff --cached --quiet || git commit -m "chore: merge developer memories [mem-sync]"
+    - git push "https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git" HEAD:${CI_COMMIT_REF_NAME}

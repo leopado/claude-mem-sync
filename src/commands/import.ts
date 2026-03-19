@@ -57,7 +57,7 @@ async function importProject(
   });
 
   // Clone/pull remote repo
-  const repoDir = await shallowClone(resolved.remote.repo, resolved.remote.branch);
+  const repoDir = await shallowClone(resolved.remote);
 
   // Read merged file
   const mergedPath = join(repoDir, "merged", projectName, "latest.json");
