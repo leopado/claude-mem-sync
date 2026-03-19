@@ -1,0 +1,10 @@
+{
+  "plugins": [
+    {
+      "name": "claude-mem-sync",
+      "description": "Team memory sharing for claude-mem — sync AI memories across developers via git. Tracks observation access for intelligent eviction scoring.",
+      "version": "1.0.0",
+      "path": ".."
+    }
+  ]
+}
