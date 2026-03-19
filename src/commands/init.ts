@@ -126,6 +126,7 @@ export default async function run(_args: ParsedArgs): Promise<void> {
         mergeCapPerProject: 500,
         exportSchedule: DEFAULT_EXPORT_SCHEDULE,
         logLevel: "info",
+        contributionRetentionDays: 30,
       },
       projects,
     };
