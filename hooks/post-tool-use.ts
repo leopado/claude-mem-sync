@@ -11,7 +11,8 @@
 
 import { openAccessDb, logAccess } from "../src/core/access-db";
 import { loadConfig, getEnabledProjects } from "../src/core/config";
-import { LOGS_DIR } from "../src/core/constants";
+import { openMemDb, getObservationProjectMap } from "../src/core/mem-db";
+import { LOGS_DIR, DEFAULT_CLAUDE_MEM_DB } from "../src/core/constants";
 import { readAllStdin } from "../src/core/compat";
 import { mkdirSync, appendFileSync } from "fs";
 import { join } from "path";
@@ -208,21 +209,48 @@ async function main(): Promise<void> {
   const ids = extractObservationIds(toolResponse);
   if (ids.length === 0) return;
 
-  // Priority: tool_input.project (from claude-mem MCP) > cwd-based resolution
-  const project =
-    extractProjectFromInput(input.tool_input, toolResponse) ??
-    resolveProject(input.cwd ?? process.cwd());
-  if (!project) {
-    logError("Could not resolve project", { cwd: input.cwd, tool_input: input.tool_input });
-    return;
-  }
-
   const sessionId = input.session_id ?? null;
   const toolName = input.tool_name ?? "unknown";
 
+  // 1. Fast path: tool_input.project is the most reliable source
+  const explicitProject = extractProjectFromInput(input.tool_input, toolResponse);
+
+  // 2. Build per-observation project map
+  let projectMap: Map<number, string>;
+
+  if (explicitProject) {
+    // All observations share the same explicit project
+    projectMap = new Map(ids.map((id) => [id, explicitProject]));
+  } else {
+    // Look up each observation's project from claude-mem's DB (source of truth)
+    try {
+      const config = loadConfig();
+      const dbPath = config.global.claudeMemDbPath ?? DEFAULT_CLAUDE_MEM_DB;
+      const memDb = openMemDb(dbPath);
+      try {
+        projectMap = getObservationProjectMap(memDb, ids);
+      } finally {
+        memDb.close();
+      }
+    } catch {
+      // DB lookup failed — try cwd fallback for all IDs
+      const cwdProject = resolveProject(input.cwd ?? process.cwd());
+      if (!cwdProject) {
+        logError("Could not resolve project", { cwd: input.cwd, tool_input: input.tool_input });
+        return;
+      }
+      projectMap = new Map(ids.map((id) => [id, cwdProject]));
+    }
+  }
+
+  if (projectMap.size === 0) {
+    logError("No projects resolved for any observation ID", { ids, cwd: input.cwd });
+    return;
+  }
+
   const db = openAccessDb();
   try {
-    for (const obsId of ids) {
+    for (const [obsId, project] of projectMap) {
       logAccess(db, obsId, project, sessionId, toolName);
     }
   } finally {

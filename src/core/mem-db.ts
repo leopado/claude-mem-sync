@@ -91,6 +91,28 @@ export function rebuildFts(db: SqliteDatabase): void {
   }
 }
 
+/**
+ * Look up the project for a set of observation IDs.
+ * Returns a Map<observationId, projectName>.
+ */
+export function getObservationProjectMap(
+  db: SqliteDatabase,
+  ids: number[],
+): Map<number, string> {
+  const result = new Map<number, string>();
+  if (ids.length === 0) return result;
+
+  // Use individual lookups (safe, no SQL interpolation, IDs are validated numbers)
+  const stmt = db.prepare("SELECT id, project FROM observations WHERE id = ?");
+  for (const id of ids) {
+    const row = stmt.get(id) as { id: number; project: string } | null;
+    if (row && row.project) {
+      result.set(row.id, row.project);
+    }
+  }
+  return result;
+}
+
 export function runIntegrityCheck(db: SqliteDatabase): string {
   const row = db.prepare("PRAGMA integrity_check").get() as { integrity_check: string };
   return row.integrity_check;
