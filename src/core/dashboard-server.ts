@@ -328,31 +328,31 @@ function handleSearch(
     // Build FTS5 match query - escape special chars for safety
     const ftsQuery = q.replace(/['"]/g, "");
 
-    let sql = `SELECT o.id, o.type, o.title, o.subtitle, o.narrative, o.project, o.created_at_epoch,
-               snippet(observations_fts, 2, '<mark>', '</mark>', '...', 40) as snippet
-               FROM observations_fts fts
-               JOIN observations o ON o.id = fts.rowid
-               WHERE observations_fts MATCH ?`;
-    const params: (string | number)[] = [ftsQuery];
+    // Build WHERE clause for reuse in count + data queries
+    let whereClause = "WHERE observations_fts MATCH ?";
+    const filterParams: (string | number)[] = [ftsQuery];
 
     if (project) {
-      sql += " AND o.project = ?";
-      params.push(project);
+      whereClause += " AND o.project = ?";
+      filterParams.push(project);
     }
     if (type) {
-      sql += " AND o.type = ?";
-      params.push(type);
+      whereClause += " AND o.type = ?";
+      filterParams.push(type);
     }
 
     // Count total
-    const countSql = sql.replace(/SELECT.*?FROM/, "SELECT COUNT(*) as total FROM");
-    const countRow = memDb.prepare(countSql).get(...params) as { total: number } | null;
+    const countSql = `SELECT COUNT(*) as total FROM observations_fts fts JOIN observations o ON o.id = fts.rowid ${whereClause}`;
+    const countRow = memDb.prepare(countSql).get(...filterParams) as { total: number } | null;
     const total = countRow?.total ?? 0;
 
     // Paginated results
-    sql += " ORDER BY rank LIMIT ? OFFSET ?";
-    params.push(limit, offset);
-    const rows = memDb.prepare(sql).all(...params);
+    const dataSql = `SELECT o.id, o.type, o.title, o.subtitle, o.narrative, o.project, o.created_at_epoch,
+               snippet(observations_fts, 2, '<mark>', '</mark>', '...', 40) as snippet
+               FROM observations_fts fts
+               JOIN observations o ON o.id = fts.rowid
+               ${whereClause} ORDER BY rank LIMIT ? OFFSET ?`;
+    const rows = memDb.prepare(dataSql).all(...filterParams, limit, offset);
 
     sendJson(res, {
       results: rows,
@@ -364,28 +364,25 @@ function handleSearch(
     });
   } catch (err) {
     // FTS5 query syntax error - fall back to LIKE search
-    let sql = `SELECT id, type, title, subtitle, narrative, project, created_at_epoch
-               FROM observations
-               WHERE (title LIKE ? OR narrative LIKE ? OR text LIKE ?)`;
     const likeParam = "%" + q + "%";
-    const params: (string | number)[] = [likeParam, likeParam, likeParam];
+    let whereClauseFb = "WHERE (title LIKE ? OR narrative LIKE ? OR text LIKE ?)";
+    const fbParams: (string | number)[] = [likeParam, likeParam, likeParam];
 
     if (project) {
-      sql += " AND project = ?";
-      params.push(project);
+      whereClauseFb += " AND project = ?";
+      fbParams.push(project);
     }
     if (type) {
-      sql += " AND type = ?";
-      params.push(type);
+      whereClauseFb += " AND type = ?";
+      fbParams.push(type);
     }
 
-    const countSql = sql.replace(/SELECT.*?FROM/, "SELECT COUNT(*) as total FROM");
-    const countRow = memDb.prepare(countSql).get(...params) as { total: number } | null;
-    const total = countRow?.total ?? 0;
+    const countSqlFb = `SELECT COUNT(*) as total FROM observations ${whereClauseFb}`;
+    const countRowFb = memDb.prepare(countSqlFb).get(...fbParams) as { total: number } | null;
+    const total = countRowFb?.total ?? 0;
 
-    sql += " ORDER BY created_at_epoch DESC LIMIT ? OFFSET ?";
-    params.push(limit, offset);
-    const rows = memDb.prepare(sql).all(...params);
+    const dataSqlFb = `SELECT id, type, title, subtitle, narrative, project, created_at_epoch FROM observations ${whereClauseFb} ORDER BY created_at_epoch DESC LIMIT ? OFFSET ?`;
+    const rows = memDb.prepare(dataSqlFb).all(...fbParams, limit, offset);
 
     sendJson(res, {
       results: rows,
