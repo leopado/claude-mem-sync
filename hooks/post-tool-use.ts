@@ -18,12 +18,17 @@ import { join } from "path";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
+interface McpContentBlock {
+  type: string;
+  text?: string;
+}
+
 interface HookInput {
   session_id?: string;
   cwd?: string;
   tool_name?: string;
   tool_input?: Record<string, unknown>;
-  tool_response?: string;
+  tool_response?: string | McpContentBlock[];
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────
@@ -116,8 +121,10 @@ function extractProjectFromInput(
       if (typeof parsed.project === "string" && parsed.project) {
         return parsed.project;
       }
-      // Array of observations — take the first project found
-      const items = parsed.observations ?? parsed.results ?? parsed.data;
+      // Direct array of observations (e.g. get_observations returns [{...}])
+      const items = Array.isArray(parsed)
+        ? parsed
+        : (parsed.observations ?? parsed.results ?? parsed.data);
       if (Array.isArray(items)) {
         for (const item of items) {
           if (typeof item?.project === "string" && item.project) {
@@ -131,6 +138,24 @@ function extractProjectFromInput(
   }
 
   return null;
+}
+
+/**
+ * Normalize tool_response to a plain string.
+ * Claude Code passes MCP responses as an array of content blocks:
+ *   [{ "type": "text", "text": "..." }]
+ * We need to extract the text from these blocks.
+ */
+function normalizeToolResponse(response: string | McpContentBlock[] | undefined): string | undefined {
+  if (!response) return undefined;
+  if (typeof response === "string") return response;
+  if (Array.isArray(response)) {
+    const texts = response
+      .filter((block) => block.type === "text" && typeof block.text === "string")
+      .map((block) => block.text!);
+    return texts.length > 0 ? texts.join("\n") : undefined;
+  }
+  return undefined;
 }
 
 /**
@@ -177,7 +202,7 @@ async function main(): Promise<void> {
 
   const input: HookInput = JSON.parse(raw);
 
-  const toolResponse = input.tool_response;
+  const toolResponse = normalizeToolResponse(input.tool_response);
   if (!toolResponse) return;
 
   const ids = extractObservationIds(toolResponse);
@@ -185,7 +210,7 @@ async function main(): Promise<void> {
 
   // Priority: tool_input.project (from claude-mem MCP) > cwd-based resolution
   const project =
-    extractProjectFromInput(input.tool_input, input.tool_response) ??
+    extractProjectFromInput(input.tool_input, toolResponse) ??
     resolveProject(input.cwd ?? process.cwd());
   if (!project) {
     logError("Could not resolve project", { cwd: input.cwd, tool_input: input.tool_input });
