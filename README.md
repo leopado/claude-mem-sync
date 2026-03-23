@@ -191,15 +191,33 @@ ls -la ~/.claude-mem/claude-mem.db
 
 ### Step 2: Install claude-mem-sync
 
-The package is published on [GitHub Packages](https://github.com/lopadova/claude-mem-sync/packages). To install it, first configure npm/bun to use the GitHub registry for the `@lopadova` scope.
+The package is published on [GitHub Packages](https://github.com/lopadova/claude-mem-sync/packages). GitHub Packages requires authentication even for public packages, so you need to set up a Personal Access Token (PAT) before installing.
 
-**Create a `.npmrc` file** in your home directory (or project root) if you don't have one:
+#### 2.1 — Create a GitHub Personal Access Token
+
+1. Go to [github.com/settings/tokens](https://github.com/settings/tokens?type=beta) (Fine-grained tokens)
+2. Click **"Generate new token"**
+3. Give it a name (e.g. `github-packages-read`)
+4. Under **Permissions > Packages**, select **Read** access
+5. Click **"Generate token"** and copy the token (starts with `github_pat_...`)
+
+> **Classic tokens** also work: go to [github.com/settings/tokens](https://github.com/settings/tokens) > "Generate new token (classic)" and select the `read:packages` scope.
+
+#### 2.2 — Configure the registry
+
+Add the following two lines to your `~/.npmrc` (create the file if it doesn't exist):
 
 ```bash
+# Point @lopadova scope to GitHub Packages
 echo "@lopadova:registry=https://npm.pkg.github.com" >> ~/.npmrc
+
+# Authenticate with your PAT (replace YOUR_TOKEN with the token you just created)
+echo "//npm.pkg.github.com/:_authToken=YOUR_TOKEN" >> ~/.npmrc
 ```
 
-Then install:
+> **Security note:** `~/.npmrc` should not be committed to any repository. Verify it's in your global `.gitignore` or add it: `echo ".npmrc" >> ~/.gitignore`.
+
+#### 2.3 — Install the package
 
 ```bash
 # With Bun (recommended — faster, built-in SQLite)
