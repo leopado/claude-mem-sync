@@ -1,10 +1,21 @@
 {
-  "name": "claude-mem-sync",
+  "name": "@lopadova/claude-mem-sync",
   "version": "1.0.0",
   "description": "Team memory sharing for claude-mem — sync AI memories across developers",
   "type": "module",
+  "main": "./dist/cli.js",
   "bin": {
     "mem-sync": "./dist/cli.js"
+  },
+  "files": [
+    "dist/",
+    "hooks/hooks.json",
+    "templates/",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
   },
   "scripts": {
     "build": "tsup",
