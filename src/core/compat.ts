@@ -7,8 +7,10 @@
 
 import { createRequire } from "node:module";
 import { spawn as nodeSpawn } from "node:child_process";
-import { statSync, copyFileSync } from "node:fs";
+import { statSync, copyFileSync, existsSync } from "node:fs";
 import { createHash } from "node:crypto";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 // ── Runtime detection ─────────────────────────────────────────────────
 
@@ -129,6 +131,22 @@ export function copyFile(src: string, dst: string): void {
 /** Compute SHA-256 hex digest of a string. */
 export function sha256(content: string): string {
   return createHash("sha256").update(content).digest("hex");
+}
+
+// ── Stdin ─────────────────────────────────────────────────────────────
+
+// ── Package root ─────────────────────────────────────────────────────
+
+/** Find the package root by walking up from the current file until package.json is found. */
+export function getPackageRoot(): string {
+  let dir = dirname(fileURLToPath(import.meta.url));
+  for (let i = 0; i < 10; i++) {
+    if (existsSync(join(dir, "package.json"))) return dir;
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return dir;
 }
 
 // ── Stdin ─────────────────────────────────────────────────────────────
