@@ -133,20 +133,21 @@ export function sha256(content: string): string {
   return createHash("sha256").update(content).digest("hex");
 }
 
-// ── Stdin ─────────────────────────────────────────────────────────────
-
 // ── Package root ─────────────────────────────────────────────────────
 
 /** Find the package root by walking up from the current file until package.json is found. */
 export function getPackageRoot(): string {
-  let dir = dirname(fileURLToPath(import.meta.url));
+  const startDir = dirname(fileURLToPath(import.meta.url));
+  let dir = startDir;
   for (let i = 0; i < 10; i++) {
     if (existsSync(join(dir, "package.json"))) return dir;
     const parent = dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
-  return dir;
+  throw new Error(
+    `Could not determine package root: no package.json found within 10 directories above ${startDir}`,
+  );
 }
 
 // ── Stdin ─────────────────────────────────────────────────────────────
