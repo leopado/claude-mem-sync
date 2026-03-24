@@ -56,6 +56,89 @@ export function countUniqueDevs(
   }
 }
 
+// ── Multi-provider helpers ─────────────────────────────────────────
+
+export function getProviderConfig(provider: string): {
+  endpoint: string;
+  envVar: string;
+  label: string;
+} {
+  if (provider === "anthropic") {
+    return {
+      endpoint: "https://api.anthropic.com/v1/messages",
+      envVar: "ANTHROPIC_API_KEY",
+      label: "Anthropic",
+    };
+  }
+  return {
+    endpoint: "https://models.github.ai/inference/chat/completions",
+    envVar: "GITHUB_TOKEN",
+    label: "GitHub Models",
+  };
+}
+
+export function buildApiRequest(
+  provider: string,
+  apiKey: string,
+  model: string,
+  systemPrompt: string,
+  userPrompt: string,
+): { url: string; headers: Record<string, string>; body: Record<string, unknown> } {
+  if (provider === "anthropic") {
+    return {
+      url: "https://api.anthropic.com/v1/messages",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: {
+        model,
+        max_tokens: 8192,
+        system: systemPrompt,
+        messages: [{ role: "user", content: userPrompt }],
+      },
+    };
+  }
+  return {
+    url: "https://models.github.ai/inference/chat/completions",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`,
+    },
+    body: {
+      model,
+      max_tokens: 8192,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+    },
+  };
+}
+
+export function parseApiResponse(
+  provider: string,
+  json: any,
+): { text: string; inputTokens: number; outputTokens: number } {
+  if (provider === "anthropic") {
+    const textBlock = json.content?.find((c: any) => c.type === "text");
+    if (!textBlock?.text) throw new Error("No text content in Anthropic API response");
+    return {
+      text: textBlock.text,
+      inputTokens: json.usage?.input_tokens ?? 0,
+      outputTokens: json.usage?.output_tokens ?? 0,
+    };
+  }
+  const choice = json.choices?.[0];
+  if (!choice?.message?.content) throw new Error("No content in GitHub Models API response");
+  return {
+    text: choice.message.content,
+    inputTokens: json.usage?.prompt_tokens ?? 0,
+    outputTokens: json.usage?.completion_tokens ?? 0,
+  };
+}
+
 // ── API Call ────────────────────────────────────────────────────────
 
 interface DistillationResult {
@@ -65,7 +148,8 @@ interface DistillationResult {
 }
 
 /**
- * Call the Anthropic API to distill observations into rules and knowledge.
+ * Call the LLM API to distill observations into rules and knowledge.
+ * Supports Anthropic API and GitHub Models (Copilot) as providers.
  */
 export async function callDistillationAPI(
   observations: Observation[],
@@ -90,39 +174,26 @@ export async function callDistillationAPI(
     );
   }
 
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
+  const provider = config.provider ?? "github-copilot";
+  const providerInfo = getProviderConfig(provider);
+  const request = buildApiRequest(provider, apiKey, config.model, systemPrompt, userPrompt);
+
+  const response = await fetch(request.url, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: config.model,
-      max_tokens: 8192,
-      system: systemPrompt,
-      messages: [{ role: "user", content: userPrompt }],
-    }),
+    headers: request.headers,
+    body: JSON.stringify(request.body),
   });
 
   if (!response.ok) {
     const errorBody = await response.text();
-    throw new Error(`Anthropic API error (${response.status}): ${errorBody}`);
+    throw new Error(`${providerInfo.label} API error (${response.status}): ${errorBody}`);
   }
 
-  const apiResult = (await response.json()) as {
-    content: Array<{ type: string; text?: string }>;
-    usage: { input_tokens: number; output_tokens: number };
-  };
-
-  // Extract text from response
-  const textBlock = apiResult.content.find((c) => c.type === "text");
-  if (!textBlock?.text) {
-    throw new Error("No text content in API response");
-  }
+  const apiResult = await response.json();
+  const { text, inputTokens, outputTokens } = parseApiResponse(provider, apiResult);
 
   // Parse JSON response
-  const parsed = parseDistillationResponse(textBlock.text);
+  const parsed = parseDistillationResponse(text);
 
   // Build report
   const uniqueDevs = countUniqueDevs(contributionsDir, project);
@@ -132,11 +203,16 @@ export async function callDistillationAPI(
   }
 
   const epochs = observations.map((o) => o.created_at_epoch).sort((a, b) => a - b);
-  const inputTokens = apiResult.usage.input_tokens;
-  const outputTokens = apiResult.usage.output_tokens;
 
-  // Cost estimate: Sonnet 4 pricing ($3/MTok input, $15/MTok output)
-  const estimatedCost = (inputTokens * 3 + outputTokens * 15) / 1_000_000;
+  // Cost estimate varies by provider
+  let estimatedCost: number;
+  if (provider === "anthropic") {
+    // Sonnet 4 pricing ($3/MTok input, $15/MTok output)
+    estimatedCost = (inputTokens * 3 + outputTokens * 15) / 1_000_000;
+  } else {
+    // GitHub Copilot — included in subscription
+    estimatedCost = 0;
+  }
 
   const report: DistillationReport = {
     project,

@@ -17,9 +17,13 @@ export default async function run(args: ParsedArgs): Promise<void> {
     return;
   }
 
+  const provider = config.global.distillation.provider ?? "github-copilot";
+  const { getProviderConfig } = await import("../core/distiller");
+  const { envVar: envVarName, label: providerLabel } = getProviderConfig(provider);
+
   if (!config.global.distillation.allowExternalApi) {
     console.log(
-      "External API calls are disabled. Set distillation.allowExternalApi = true to allow sending data to the Anthropic API.",
+      `External API calls are disabled. Set distillation.allowExternalApi = true to allow sending data to the ${providerLabel} API.`,
     );
     return;
   }
@@ -31,9 +35,9 @@ export default async function run(args: ParsedArgs): Promise<void> {
   }
 
   // Get API key from args, env, or fail
-  const apiKey = extractFlag(args.rest, "--api-key") ?? process.env.ANTHROPIC_API_KEY;
+  const apiKey = extractFlag(args.rest, "--api-key") ?? process.env[envVarName];
   if (!apiKey && !args.dryRun) {
-    console.error("No API key provided. Use --api-key KEY or set ANTHROPIC_API_KEY env var.");
+    console.error(`No API key provided. Use --api-key KEY or set ${envVarName} env var.`);
     process.exit(1);
   }
 

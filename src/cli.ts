@@ -34,6 +34,7 @@ type CommandLoader = (() => Promise<CommandModule>) | null;
 
 const COMMANDS: Record<string, CommandLoader> = {
   init: () => import("./commands/init"),
+  "setup-repo": () => import("./commands/setup-repo"),
   export: () => import("./commands/export"),
   import: () => import("./commands/import"),
   preview: () => import("./commands/preview"),
@@ -62,6 +63,7 @@ Usage: mem-sync <command> [options]
 
 Commands:
   init                    Interactive setup wizard
+  setup-repo [name]       Scaffold a shared team memory repository
   export                  Export filtered memories to git
   import                  Import merged memories from git
   preview                 Dry-run: show what would be exported

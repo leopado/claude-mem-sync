@@ -54,6 +54,7 @@ export const ProfilesConfigSchema = z.object({
 
 export const DistillationConfigSchema = z.object({
   enabled: z.boolean().default(false),
+  provider: z.enum(["anthropic", "github-copilot"]).default("github-copilot"),
   model: z.string().default("claude-sonnet-4-20250514"),
   schedule: z.enum(["after-merge", "weekly", "manual"]).default("after-merge"),
   excludeTypes: z.array(z.string()).default([]),

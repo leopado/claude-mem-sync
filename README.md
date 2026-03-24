@@ -295,18 +295,34 @@ Here's what a typical config looks like after the wizard:
 
 ### Step 4: Create the Shared Team Repository
 
-You need a **private GitHub repository** where all team members push their memory exports. This is where the merge bot runs.
+You need a **private repository** where all team members push their memory exports.
+
+#### Recommended: Use `setup-repo`
 
 ```bash
-# Create a new private repo on GitHub
-gh repo create my-org/dev-memories --private --description "Shared AI memories for the team"
+mem-sync setup-repo my-team-memories
+```
 
-# Clone it to your machine
+This interactive wizard will:
+- Create the directory structure (`contributions/`, `merged/`, `profiles/`, `distilled/`)
+- Copy CI workflow templates for your provider (GitHub Actions, GitLab CI, or Bitbucket Pipelines)
+- Configure the LLM provider for distillation (GitHub Copilot or Anthropic)
+- Optionally create the GitHub repo via `gh repo create`
+- Generate a README and `.gitignore`
+- Make the initial commit
+
+#### Manual alternative
+
+If you prefer to set things up manually:
+
+```bash
+# Create a new private repo
+gh repo create my-org/dev-memories --private --description "Shared AI memories"
 gh repo clone my-org/dev-memories
 cd dev-memories
 
-# Create the directory structure
-mkdir -p contributions merged profiles distilled .github/workflows
+# Create directories (works on all platforms — Windows, macOS, Linux)
+node -e "['contributions','merged','profiles','distilled'].forEach(d=>{require('fs').mkdirSync(d,{recursive:true});require('fs').writeFileSync(d+'/.gitkeep','')})"
 ```
 
 > **Important**: This repo should be **private**. Observations can contain code snippets, internal URLs, and technical decisions you don't want public.
@@ -315,7 +331,9 @@ mkdir -p contributions merged profiles distilled .github/workflows
 
 ### Step 5: Set Up GitHub Actions (CI/CD)
 
-GitHub Actions will automatically merge contribution files when developers push exports. Copy the templates from your claude-mem-sync installation.
+> **If you used `mem-sync setup-repo` in Step 4, workflows are already in place — skip to Step 6.**
+
+GitHub Actions will automatically merge contribution files when developers push exports.
 
 #### 5.1 — Add the Merge Workflow
 
@@ -325,11 +343,14 @@ This workflow triggers every time a developer pushes a contribution file. It mer
 # Make sure you're in the shared repo directory
 cd dev-memories
 
-# Copy the merge workflow template
-cp $(npm root -g)/claude-mem-sync/templates/github-action/merge-memories.yml .github/workflows/
+# Create the workflows directory
+node -e "require('fs').mkdirSync('.github/workflows',{recursive:true})"
 
-# Copy the gitignore template
-cp $(npm root -g)/claude-mem-sync/templates/.gitignore.example .gitignore
+# Download the merge workflow
+curl -sL https://raw.githubusercontent.com/lopadova/claude-mem-sync/main/templates/github-action/merge-memories.yml -o .github/workflows/merge-memories.yml
+
+# Download the gitignore
+curl -sL https://raw.githubusercontent.com/lopadova/claude-mem-sync/main/templates/.gitignore.example -o .gitignore
 ```
 
 The merge workflow will:
@@ -343,24 +364,15 @@ The merge workflow will:
 If you want LLM-powered knowledge distillation (extracting rules and knowledge docs from merged observations), add the distillation workflow:
 
 ```bash
-cp $(npm root -g)/claude-mem-sync/templates/github-action/distill-knowledge.yml .github/workflows/
+curl -sL https://raw.githubusercontent.com/lopadova/claude-mem-sync/main/templates/github-action/distill-knowledge.yml -o .github/workflows/distill-knowledge.yml
 ```
 
-This workflow requires an Anthropic API key. Add it as a repository secret:
+**Choose your LLM provider:**
 
-```bash
-# Go to: https://github.com/my-org/dev-memories/settings/secrets/actions
-# Click "New repository secret"
-# Name: ANTHROPIC_API_KEY
-# Value: your Anthropic API key (starts with sk-ant-)
-```
-
-Or via the CLI:
-
-```bash
-gh secret set ANTHROPIC_API_KEY --repo my-org/dev-memories
-# Paste your API key when prompted
-```
+| Provider | Secret needed | Setup |
+|----------|--------------|-------|
+| **GitHub Copilot** (recommended) | `GITHUB_TOKEN` (built-in) | Edit the workflow: replace `ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}` with `GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}` |
+| **Anthropic API** | `ANTHROPIC_API_KEY` | Add the secret to your repo: `gh secret set ANTHROPIC_API_KEY --repo my-org/dev-memories` |
 
 #### 5.3 — Commit and Push
 
@@ -372,15 +384,15 @@ git push
 
 #### 5.4 — Invite Your Team
 
-Add your team members as collaborators so they can push their exports:
+Add team members as collaborators:
 
 ```bash
 gh repo edit my-org/dev-memories --add-collaborator teammate-username
 ```
 
 Each team member needs to:
-1. Install the plugin (Step 2) — this also installs the `mem-sync` CLI automatically
-2. Run `mem-sync init` (Step 3) — using the **same repo** (`my-org/dev-memories`) but their **own devName**
+1. Install the plugin: `claude /install-plugin lopadova/claude-mem-sync`
+2. Run `mem-sync init` — using the **same repo** but their **own devName**
 
 ---
 
@@ -734,6 +746,7 @@ claude-mem has no native tag system. Tags like `#shared` and `#keep` work via fr
 | Command | Description |
 |---------|-------------|
 | `mem-sync init` | Interactive setup wizard |
+| `mem-sync setup-repo [name]` | Scaffold a shared team memory repository |
 | `mem-sync export [--project X] [--all] [--dry-run]` | Export filtered memories to git |
 | `mem-sync import [--project X] [--all]` | Import merged memories from git |
 | `mem-sync preview [--project X] [--all]` | Dry-run: show what would be exported |

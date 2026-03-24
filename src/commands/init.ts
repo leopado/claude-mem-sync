@@ -141,6 +141,7 @@ export default async function run(_args: ParsedArgs): Promise<void> {
         profiles: { enabled: false, anonymizeOthers: true },
         distillation: {
           enabled: false,
+          provider: "github-copilot",
           model: "claude-sonnet-4-20250514",
           schedule: "after-merge",
           excludeTypes: [],
