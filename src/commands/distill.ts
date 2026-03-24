@@ -5,6 +5,7 @@ import {
   callDistillationAPI,
   writeDistillationOutput,
   countUniqueDevs,
+  getProviderConfig,
 } from "../core/distiller";
 import { estimateTokens } from "../core/prompts/distillation-system";
 import type { ParsedArgs } from "../cli";
@@ -18,7 +19,6 @@ export default async function run(args: ParsedArgs): Promise<void> {
   }
 
   const provider = config.global.distillation.provider ?? "github-copilot";
-  const { getProviderConfig } = await import("../core/distiller");
   const { envVar: envVarName, label: providerLabel } = getProviderConfig(provider);
 
   if (!config.global.distillation.allowExternalApi) {
@@ -93,8 +93,13 @@ async function distillProject(
   console.log(`  Model: ${distillConfig.model}`);
 
   if (dryRun) {
-    console.log("\n  [DRY RUN] Would send to Anthropic API for distillation.");
-    console.log(`  Estimated cost: ~$${((estimatedTokens * 3 + 8192 * 15) / 1_000_000).toFixed(4)}`);
+    const provider = distillConfig.provider ?? "github-copilot";
+    const { label } = getProviderConfig(provider);
+    const costHint = provider === "anthropic"
+      ? `  Estimated cost: ~$${((estimatedTokens * 3 + 8192 * 15) / 1_000_000).toFixed(4)}`
+      : "  Estimated cost: $0 (GitHub Copilot — included in subscription)";
+    console.log(`\n  [DRY RUN] Would send to ${label} API for distillation.`);
+    console.log(costHint);
     return;
   }
 

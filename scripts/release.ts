@@ -112,7 +112,14 @@ async function main() {
   const newVersion = bump(currentVersion, bumpType);
   console.log(`\nBumping: \x1b[33mv${currentVersion}\x1b[0m → \x1b[1;32mv${newVersion}\x1b[0m (${bumpType})\n`);
 
-  // 3. Update all version files
+  // 3. Guard: working tree must be clean (only version files will be staged)
+  const dirtyFiles = await run(["git", "status", "--porcelain"]);
+  if (dirtyFiles) {
+    console.error(`Working tree has uncommitted changes:\n${dirtyFiles}\n\nPlease commit or stash before releasing.`);
+    process.exit(1);
+  }
+
+  // 4. Update all version files
   for (const file of VERSION_FILES) {
     const data = readJson(file.path);
     setNestedValue(data, file.jsonPath, newVersion);
@@ -120,25 +127,25 @@ async function main() {
     console.log(`  Updated ${file.path}`);
   }
 
-  // 4. Git commit
+  // 5. Git commit
   const commitMsg = `Bump version from ${currentVersion} to ${newVersion}`;
   const filePaths = VERSION_FILES.map(f => f.path);
   await run(["git", "add", ...filePaths]);
   await run(["git", "commit", "-m", commitMsg]);
   console.log(`\n  Committed: "${commitMsg}"`);
 
-  // 5. Create tag
+  // 6. Create tag
   const tag = `v${newVersion}`;
   await run(["git", "tag", tag]);
   console.log(`  Tagged: ${tag}`);
 
-  // 6. Push commit + tag
+  // 7. Push commit + tag
   console.log("\n  Pushing to remote...");
   await run(["git", "push"]);
   await run(["git", "push", "--tags"]);
   console.log("  Pushed commit and tag.");
 
-  // 7. Create GitHub release
+  // 8. Create GitHub release
   console.log("  Creating GitHub release...\n");
   const releaseUrl = await run([
     "gh", "release", "create", tag,
