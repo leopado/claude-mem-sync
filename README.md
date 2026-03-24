@@ -191,6 +191,7 @@ The setup hook will automatically:
 2. Install the `mem-sync` CLI globally via `npm link`
 3. Skip installation if `mem-sync` is already available
 
+> **Note:** The setup hook runs via `node` (see `hooks.json`), so you must have **Node.js ≥ 18** installed and on your `PATH`, even if you primarily use Bun. Without Node ≥ 18, the automatic CLI installation will fail.
 Verify everything is working:
 
 ```bash
