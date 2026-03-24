@@ -23,8 +23,13 @@ jobs:
         with:
           bun-version: latest
 
+      - name: Configure GitHub Packages registry
+        run: |
+          echo "@lopadova:registry=https://npm.pkg.github.com" >> ~/.npmrc
+          echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" >> ~/.npmrc
+
       - name: Install claude-mem-sync
-        run: bun install -g claude-mem-sync
+        run: bun install -g @lopadova/claude-mem-sync
 
       - name: Merge new contributions
         run: |
@@ -36,7 +41,25 @@ jobs:
             --retention-days 30
 
       - name: Generate developer profiles
+        env:
+          GH_REPO: ${{ github.repository }}
         run: |
+          python3 << 'PYEOF'
+          import os, json, glob
+          repo = os.environ['GH_REPO']
+          projects = {}
+          for path in sorted(glob.glob('merged/*/latest.json')):
+              proj = path.split('/')[1]
+              projects[proj] = {'enabled': True, 'remote': {'repo': repo}}
+          config = {
+              'global': {'devName': 'ci-bot', 'profiles': {'enabled': True, 'anonymizeOthers': False}},
+              'projects': projects,
+          }
+          os.makedirs(os.path.expanduser('~/.claude-mem-sync'), exist_ok=True)
+          with open(os.path.expanduser('~/.claude-mem-sync/config.json'), 'w') as f:
+              json.dump(config, f, indent=2)
+          print('Config created for projects:', list(projects.keys()))
+          PYEOF
           mem-sync profile \
             --all \
             --contributions-dir contributions/ \
@@ -49,5 +72,5 @@ jobs:
           git config user.email "mem-sync-bot@users.noreply.github.com"
           git add merged/ profiles/ .merge-state.json contributions/
           git diff --cached --quiet || git commit -m "chore: merge developer memories [mem-sync]"
-          git pull --rebase || true
+          git pull --rebase
           git push
