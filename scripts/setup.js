@@ -60,8 +60,10 @@ function hasBun() {
 // ---------------------------------------------------------------------------
 
 function cliAlreadyInstalled() {
-  const r = run("mem-sync", ["--help"], { timeout: 10_000 });
-  return r.ok;
+  const r = run("mem-sync", ["--version"], { timeout: 10_000 });
+  if (!r.ok) return false;
+  const versionOutput = (r.stdout || "") + (r.stderr || "");
+  return versionOutput.includes("claude-mem-sync");
 }
 
 function buildProject(root) {
