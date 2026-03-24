@@ -34,6 +34,7 @@
 - [Maintenance](#maintenance)
 - [Security & Privacy](#security--privacy)
 - [Architecture](#architecture)
+- [Publishing a Release (maintainers)](#publishing-a-release-maintainers)
 - [Troubleshooting](#troubleshooting)
 - [License](#license)
 
@@ -190,12 +191,40 @@ ls -la ~/.claude-mem/claude-mem.db
 
 ### Step 2: Install claude-mem-sync
 
+The package is published on [GitHub Packages](https://github.com/lopadova/claude-mem-sync/packages). GitHub Packages requires authentication even for public packages, so you need to set up a Personal Access Token (PAT) before installing.
+
+#### 2.1 — Create a GitHub Personal Access Token
+
+1. Go to [github.com/settings/tokens](https://github.com/settings/tokens?type=beta) (Fine-grained tokens)
+2. Click **"Generate new token"**
+3. Give it a name (e.g. `github-packages-read`)
+4. Under **Permissions > Packages**, select **Read** access
+5. Click **"Generate token"** and copy the token (starts with `github_pat_...`)
+
+> **Classic tokens** also work: go to [github.com/settings/tokens](https://github.com/settings/tokens) > "Generate new token (classic)" and select the `read:packages` scope.
+
+#### 2.2 — Configure the registry
+
+Add the following two lines to your `~/.npmrc` (create the file if it doesn't exist):
+
+```bash
+# Point @lopadova scope to GitHub Packages
+echo "@lopadova:registry=https://npm.pkg.github.com" >> ~/.npmrc
+
+# Authenticate with your PAT (replace YOUR_TOKEN with the token you just created)
+echo "//npm.pkg.github.com/:_authToken=YOUR_TOKEN" >> ~/.npmrc
+```
+
+> **Security note:** `~/.npmrc` should not be committed to any repository. Verify it's in your global `.gitignore` or add it: `echo ".npmrc" >> ~/.gitignore`.
+
+#### 2.3 — Install the package
+
 ```bash
 # With Bun (recommended — faster, built-in SQLite)
-bun install -g claude-mem-sync
+bun add -g @lopadova/claude-mem-sync
 
-# OR with Node.js (uses better-sqlite3 as SQLite driver)
-npm install -g claude-mem-sync
+# OR with npm / Node.js (uses better-sqlite3 as SQLite driver)
+npm install -g @lopadova/claude-mem-sync
 
 # Verify it works
 mem-sync --version   # Should print: claude-mem-sync v1.0.0
@@ -1034,7 +1063,39 @@ Only observations matching your configured filters (types, keywords, tags) are e
 - **Distiller** — direct `fetch` to Anthropic Messages API (no SDK dependency), Zod-validated structured output
 - **Dashboard** — pure Node.js HTTP server, 19 API endpoints, vanilla JS SPA with Chart.js 4
 
-## Troubleshooting
+## Publishing a Release (maintainers)
+
+This package is published automatically to [GitHub Packages](https://github.com/lopadova/claude-mem-sync/packages) every time a GitHub Release is created. No custom tokens are needed — the workflow uses the built-in `GITHUB_TOKEN`.
+
+### How it works
+
+1. A maintainer pushes changes to `main`
+2. Creates a GitHub Release (from the UI or via CLI)
+3. The `release-package` workflow triggers automatically
+4. It installs dependencies, runs tests, type-checks, builds, and publishes to GitHub Packages
+5. The package becomes available at `@lopadova/claude-mem-sync`
+
+### Step-by-step
+
+```bash
+# 1. Bump the version in package.json
+#    (the version MUST be different from the last published one, or publish will fail with 409 Conflict)
+bun version patch   # or: minor, major, prepatch, preminor, premajor
+
+# 2. Commit the version bump
+git add package.json
+git commit -m "chore: bump version to $(node -p 'require(\"./package.json\").version')"
+
+# 3. Push to main
+git push origin main
+
+# 4. Create the release (triggers the publish workflow)
+gh release create "v$(node -p 'require(\"./package.json\").version')" --generate-notes
+```
+
+The workflow runs at `.github/workflows/release-package.yml`.
+
+
 
 ### "Config not found"
 
