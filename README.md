@@ -248,19 +248,25 @@ npm bin -g
 The plugin adds a **PostToolUse hook** that tracks which memories Claude actually reads during your sessions. This enables the "hook mode" eviction strategy which is much smarter than passive mode.
 
 ```bash
-# Navigate to where claude-mem-sync is installed
-cd $(npm root -g)/claude-mem-sync
+# Add the claude-mem-sync marketplace
+claude plugin marketplace add lopadova/claude-mem-sync
 
-# Add it as a Claude Code plugin
-claude /plugin add .
+# Install the plugin
+claude plugin install claude-mem-sync@claude-mem-sync
 ```
 
 Verify the plugin is active:
 
 ```bash
-claude /plugin list
-# You should see claude-mem-sync in the list
+claude plugin list
+# You should see claude-mem-sync@claude-mem-sync with status: ✔ enabled
 ```
+
+> **Local development**: If you cloned the repo locally, you can add it as a local marketplace instead:
+> ```bash
+> claude plugin marketplace add /path/to/claude-mem-sync
+> claude plugin install claude-mem-sync@claude-mem-sync
+> ```
 
 > **What does this hook do?** Every time Claude reads a memory (via the `mcp__plugin_claude-mem_mcp-search__*` tools), the hook records which observations were accessed. This data is used to compute more accurate eviction scores — memories that are actually used by Claude get higher scores and survive longer.
 

@@ -1,0 +1,9 @@
+{
+  "name": "claude-mem-sync",
+  "description": "Team memory sharing for claude-mem — tracks observation access for intelligent eviction scoring",
+  "version": "1.0.0",
+  "author": {
+    "name": "Lorenzo"
+  },
+  "hooks": "./hooks/hooks.json"
+}
