@@ -94,7 +94,6 @@ Developer A                    GitHub (shared repo)              Developer B
 - **Developer knowledge profiles** — per-dev metrics: knowledge spectrum, concept map, file coverage, temporal patterns, survival rate
 - **Knowledge distillation** — LLM-powered extraction of CLAUDE.md rules and knowledge docs from team observations
 - **Team insights** — knowledge gaps detection, concept coverage heatmaps, bus-factor risk analysis
-- **Dual runtime** — works with both Bun and Node.js (v18+)
 - **Configurable cleanup** — automatic retention policy for old contribution files
 
 ---
@@ -107,7 +106,7 @@ This guide walks you through the **complete setup** of claude-mem-sync, from zer
 
 Before you start, make sure you have these tools installed on your machine.
 
-#### 1.1 — Install Bun (recommended) or Node.js
+#### 1.1 — Install Bun (recommended)
 
 You need **one** of these runtimes. Bun is recommended because it's faster and has built-in SQLite.
 
@@ -122,19 +121,6 @@ powershell -c "irm bun.sh/install.ps1 | iex"
 
 # Verify it works
 bun --version   # Should print 1.x.x or higher
-```
-
-**Option B: Install Node.js** (if you can't use Bun)
-
-Download from [nodejs.org](https://nodejs.org/) (v18 or later), or:
-
-```bash
-# macOS (Homebrew)
-brew install node
-
-# Verify it works
-node --version   # Should print v18.x.x or higher
-npm --version    # Should print 9.x.x or higher
 ```
 
 #### 1.2 — Install Git
@@ -223,8 +209,6 @@ echo "//npm.pkg.github.com/:_authToken=YOUR_TOKEN" >> ~/.npmrc
 # With Bun (recommended — faster, built-in SQLite)
 bun add -g @lopadova/claude-mem-sync
 
-# OR with npm / Node.js (uses better-sqlite3 as SQLite driver)
-npm install -g @lopadova/claude-mem-sync
 
 # Verify it works
 mem-sync --version   # Should print: claude-mem-sync v1.0.0
@@ -236,9 +220,6 @@ If `mem-sync` is not found, make sure your global npm/bun bin directory is in yo
 ```bash
 # For Bun — check where global packages go
 bun pm bin -g
-
-# For Node.js — check where global packages go
-npm bin -g
 ```
 
 ---
@@ -248,19 +229,25 @@ npm bin -g
 The plugin adds a **PostToolUse hook** that tracks which memories Claude actually reads during your sessions. This enables the "hook mode" eviction strategy which is much smarter than passive mode.
 
 ```bash
-# Navigate to where claude-mem-sync is installed
-cd $(npm root -g)/claude-mem-sync
+# Add the claude-mem-sync marketplace
+claude plugin marketplace add lopadova/claude-mem-sync
 
-# Add it as a Claude Code plugin
-claude /plugin add .
+# Install the plugin
+claude plugin install claude-mem-sync@claude-mem-sync
 ```
 
 Verify the plugin is active:
 
 ```bash
-claude /plugin list
-# You should see claude-mem-sync in the list
+claude plugin list
+# You should see claude-mem-sync@claude-mem-sync with status: ✔ enabled
 ```
+
+> **Local development**: If you cloned the repo locally, you can add it as a local marketplace instead:
+> ```bash
+> claude plugin marketplace add /path/to/claude-mem-sync
+> claude plugin install claude-mem-sync@claude-mem-sync
+> ```
 
 > **What does this hook do?** Every time Claude reads a memory (via the `mcp__plugin_claude-mem_mcp-search__*` tools), the hook records which observations were accessed. This data is used to compute more accurate eviction scores — memories that are actually used by Claude get higher scores and survive longer.
 
@@ -1051,8 +1038,8 @@ Only observations matching your configured filters (types, keywords, tags) are e
 
 ## Architecture
 
-- **Dual runtime** — works on Bun (v1.0+) and Node.js (v18+) via `src/core/compat.ts` abstraction layer
-- **SQLite** — `bun:sqlite` on Bun, `better-sqlite3` on Node.js (auto-detected at startup)
+- **Runtime** — works on Bun (v1.0+)
+- **SQLite** — `bun:sqlite` on Bun
 - **Export + hook are read-only** on claude-mem's DB
 - **Import is the only write operation** — uses transactions with rollback safety
 - **access.db** is a separate tracking database — never touches claude-mem's schema
