@@ -38,7 +38,7 @@ function run(cmd, args, opts = {}) {
     encoding: "utf-8",
     stdio: ["pipe", "pipe", "pipe"],
     shell: IS_WINDOWS,
-    timeout: opts.timeout ?? 60_000,
+    timeout: opts.timeout,
     cwd: opts.cwd,
   });
   return { ok: result.status === 0, stdout: result.stdout ?? "", stderr: result.stderr ?? "" };
