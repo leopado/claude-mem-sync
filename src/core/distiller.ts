@@ -1,5 +1,5 @@
 import { join } from "path";
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSync } from "fs";
 import { logger } from "./logger";
 import {
   buildDistillationSystemPrompt,
@@ -46,7 +46,6 @@ export function countUniqueDevs(
   if (!existsSync(projectDir)) return 0;
 
   try {
-    const { readdirSync, statSync } = require("fs");
     const devDirs = readdirSync(projectDir).filter((name: string) => {
       return statSync(join(projectDir, name)).isDirectory();
     });

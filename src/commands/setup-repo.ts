@@ -69,11 +69,19 @@ export default async function run(args: ParsedArgs): Promise<void> {
 
     // 6. Resolve target directory
     const targetDir = resolve(repoName);
-    if (existsSync(targetDir) && existsSync(join(targetDir, ".git"))) {
-      const cont = await askYesNo(`Directory "${repoName}" already exists and is a git repo. Continue?`, false);
-      if (!cont) {
-        console.log("Aborted.");
-        return;
+    if (existsSync(targetDir)) {
+      if (existsSync(join(targetDir, ".git"))) {
+        const cont = await askYesNo(`Directory "${repoName}" already exists and is a git repo. Continue?`, false);
+        if (!cont) {
+          console.log("Aborted.");
+          return;
+        }
+      } else {
+        const cont = await askYesNo(`Directory "${repoName}" already exists (not a git repo). Scaffold inside it?`, false);
+        if (!cont) {
+          console.log("Aborted.");
+          return;
+        }
       }
     }
 
