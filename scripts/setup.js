@@ -4,7 +4,7 @@
  * Setup hook for claude-mem-sync plugin.
  * Runs once during `claude plugin install` to:
  * 1. Build dist/ if missing (bun preferred, npm fallback)
- * 2. Make `mem-sync` CLI globally available via npm link
+ * 2. Make `mem-sync` CLI globally available via bun link / npm link
  *
  * Standalone Node.js script — zero external dependencies.
  * All log messages go to stderr (stdout is reserved for Claude Code JSON).
@@ -17,6 +17,7 @@ import { platform } from "os";
 import { fileURLToPath } from "url";
 
 const IS_WINDOWS = platform() === "win32";
+const PACKAGE_NAME = "@lopadova/claude-mem-sync";
 const log = (msg) => process.stderr.write(`[mem-sync] ${msg}\n`);
 
 // ---------------------------------------------------------------------------
@@ -75,10 +76,15 @@ function buildProject(root) {
     const dep = run("bun", ["install"], { cwd: root });
     if (!dep.ok) {
       log("bun install failed, trying npm...");
+      if (!commandExists("npm")) { log("npm not found — cannot install dependencies"); return false; }
       const fallback = run("npm", ["install"], { cwd: root });
       if (!fallback.ok) { log("npm install also failed"); return false; }
     }
   } else {
+    if (!commandExists("npm")) {
+      log("Neither bun nor npm found — cannot install dependencies");
+      return false;
+    }
     const dep = run("npm", ["install"], { cwd: root });
     if (!dep.ok) { log("npm install failed: " + dep.stderr.slice(0, 200)); return false; }
   }
@@ -88,14 +94,30 @@ function buildProject(root) {
   if (useBun) {
     const b = run("bun", ["run", "build"], { cwd: root });
     if (b.ok) return true;
-    log("bun build failed, trying npx tsup...");
+    log("bun build failed, trying bunx tsup...");
+    const bx = run("bunx", ["tsup"], { cwd: root });
+    if (bx.ok) return true;
+    log("Build failed: " + bx.stderr.slice(0, 200));
+    return false;
   }
+  // No bun: use npx tsup
   const b = run("npx", ["tsup"], { cwd: root });
   if (!b.ok) { log("Build failed: " + b.stderr.slice(0, 200)); return false; }
   return true;
 }
 
 function linkCLI(root) {
+  const useBun = hasBun();
+  if (useBun) {
+    log("Linking CLI globally via bun link...");
+    const r = run("bun", ["link"], { cwd: root, timeout: 30_000 });
+    if (r.ok) return true;
+    log("bun link failed, falling back to npm link...");
+  }
+  if (!commandExists("npm")) {
+    log("npm not found — cannot link CLI");
+    return false;
+  }
   log("Linking CLI globally via npm link...");
   const r = run("npm", ["link"], { cwd: root, timeout: 30_000 });
   return r.ok;
@@ -135,7 +157,8 @@ try {
   if (!existsSync(join(ROOT, "dist", "cli.js"))) {
     if (!buildProject(ROOT)) {
       log("WARNING: Build failed — CLI will not be available.");
-      log("Install manually: bun add -g @lopadova/claude-mem-sync");
+      log("Install manually: bun add -g " + PACKAGE_NAME);
+      log("              or: npm install -g " + PACKAGE_NAME);
       finish();
       process.exit(0);
     }
@@ -148,9 +171,10 @@ try {
   if (linkCLI(ROOT)) {
     log("CLI installed successfully. Run: mem-sync --help");
   } else {
-    log("WARNING: npm link failed.");
-    log("Install manually: bun add -g @lopadova/claude-mem-sync");
-    log("Or run: npm link (from " + ROOT + ")");
+    log("WARNING: Linking failed.");
+    log("Install manually: bun add -g " + PACKAGE_NAME);
+    log("              or: npm install -g " + PACKAGE_NAME);
+    log("Or run: npm link / bun link (from " + ROOT + ")");
   }
 
   // 5. Write marker
