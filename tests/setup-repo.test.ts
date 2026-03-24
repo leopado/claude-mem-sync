@@ -33,24 +33,13 @@ describe("setup-repo templates", () => {
     expect(replaced).not.toContain("{{REPO_NAME}}");
   });
 
-  test("distill workflow github-copilot swap works", () => {
+  test("distill workflow uses github-copilot provider by default", () => {
     const yml = readFileSync(
       join(TEMPLATES_DIR, "github-action", "distill-knowledge.yml"),
       "utf-8",
     );
-    const swapped = yml.replace(
-      "ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}",
-      "GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}",
-    );
-    expect(swapped).toContain("GITHUB_TOKEN");
-    expect(swapped).not.toContain("ANTHROPIC_API_KEY");
-  });
-
-  test("distill workflow retains anthropic config when no swap", () => {
-    const yml = readFileSync(
-      join(TEMPLATES_DIR, "github-action", "distill-knowledge.yml"),
-      "utf-8",
-    );
-    expect(yml).toContain("ANTHROPIC_API_KEY");
+    expect(yml).toContain("GITHUB_TOKEN");
+    expect(yml).toContain("github-copilot");
+    expect(yml).not.toContain("ANTHROPIC_API_KEY");
   });
 });
