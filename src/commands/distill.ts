@@ -5,6 +5,7 @@ import {
   callDistillationAPI,
   writeDistillationOutput,
   countUniqueDevs,
+  getProviderConfig,
 } from "../core/distiller";
 import { estimateTokens } from "../core/prompts/distillation-system";
 import type { ParsedArgs } from "../cli";
@@ -17,9 +18,12 @@ export default async function run(args: ParsedArgs): Promise<void> {
     return;
   }
 
+  const provider = config.global.distillation.provider ?? "github-copilot";
+  const { envVar: envVarName, label: providerLabel } = getProviderConfig(provider);
+
   if (!config.global.distillation.allowExternalApi) {
     console.log(
-      "External API calls are disabled. Set distillation.allowExternalApi = true to allow sending data to the Anthropic API.",
+      `External API calls are disabled. Set distillation.allowExternalApi = true to allow sending data to the ${providerLabel} API.`,
     );
     return;
   }
@@ -31,9 +35,9 @@ export default async function run(args: ParsedArgs): Promise<void> {
   }
 
   // Get API key from args, env, or fail
-  const apiKey = extractFlag(args.rest, "--api-key") ?? process.env.ANTHROPIC_API_KEY;
+  const apiKey = extractFlag(args.rest, "--api-key") ?? process.env[envVarName];
   if (!apiKey && !args.dryRun) {
-    console.error("No API key provided. Use --api-key KEY or set ANTHROPIC_API_KEY env var.");
+    console.error(`No API key provided. Use --api-key KEY or set ${envVarName} env var.`);
     process.exit(1);
   }
 
@@ -89,8 +93,13 @@ async function distillProject(
   console.log(`  Model: ${distillConfig.model}`);
 
   if (dryRun) {
-    console.log("\n  [DRY RUN] Would send to Anthropic API for distillation.");
-    console.log(`  Estimated cost: ~$${((estimatedTokens * 3 + 8192 * 15) / 1_000_000).toFixed(4)}`);
+    const provider = distillConfig.provider ?? "github-copilot";
+    const { label } = getProviderConfig(provider);
+    const costHint = provider === "anthropic"
+      ? `  Estimated cost: ~$${((estimatedTokens * 3 + 8192 * 15) / 1_000_000).toFixed(4)}`
+      : "  Estimated cost: $0 (GitHub Copilot — included in subscription)";
+    console.log(`\n  [DRY RUN] Would send to ${label} API for distillation.`);
+    console.log(costHint);
     return;
   }
 

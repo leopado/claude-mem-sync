@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { parseDistillationResponse } from "../src/core/distiller";
+import { parseDistillationResponse, getProviderConfig, buildApiRequest, parseApiResponse } from "../src/core/distiller";
 import {
   buildDistillationSystemPrompt,
   buildDistillationUserPrompt,
@@ -147,6 +147,7 @@ describe("config schema extensions", () => {
   test("DistillationConfigSchema has correct defaults", async () => {
     const { DistillationConfigSchema } = await import("../src/types/config");
     const result = DistillationConfigSchema.parse({});
+    expect(result.provider).toBe("github-copilot");
     expect(result.enabled).toBe(false);
     expect(result.model).toBe("claude-sonnet-4-20250514");
     expect(result.schedule).toBe("after-merge");
@@ -157,10 +158,98 @@ describe("config schema extensions", () => {
     expect(result.reviewers).toEqual([]);
   });
 
+  test("DistillationConfigSchema accepts anthropic provider", async () => {
+    const { DistillationConfigSchema } = await import("../src/types/config");
+    const result = DistillationConfigSchema.parse({ provider: "anthropic" });
+    expect(result.provider).toBe("anthropic");
+  });
+
+  test("DistillationConfigSchema accepts github-copilot provider", async () => {
+    const { DistillationConfigSchema } = await import("../src/types/config");
+    const result = DistillationConfigSchema.parse({ provider: "github-copilot" });
+    expect(result.provider).toBe("github-copilot");
+  });
+
+  test("DistillationConfigSchema rejects invalid provider", async () => {
+    const { DistillationConfigSchema } = await import("../src/types/config");
+    expect(() => DistillationConfigSchema.parse({ provider: "openai" })).toThrow();
+  });
+
   test("GlobalConfigSchema includes profiles and distillation", async () => {
     const { GlobalConfigSchema } = await import("../src/types/config");
     const result = GlobalConfigSchema.parse({ devName: "test-dev" });
     expect(result.profiles.enabled).toBe(false);
     expect(result.distillation.enabled).toBe(false);
+  });
+});
+
+describe("multi-provider routing", () => {
+  test("getProviderConfig returns Anthropic config", () => {
+    const config = getProviderConfig("anthropic");
+    expect(config.endpoint).toBe("https://api.anthropic.com/v1/messages");
+    expect(config.envVar).toBe("ANTHROPIC_API_KEY");
+    expect(config.label).toBe("Anthropic");
+  });
+
+  test("getProviderConfig returns GitHub Models config", () => {
+    const config = getProviderConfig("github-copilot");
+    expect(config.endpoint).toBe("https://models.github.ai/inference/chat/completions");
+    expect(config.envVar).toBe("GITHUB_TOKEN");
+    expect(config.label).toBe("GitHub Models");
+  });
+
+  test("getProviderConfig defaults to github-copilot for unknown provider", () => {
+    const config = getProviderConfig("unknown");
+    expect(config.envVar).toBe("GITHUB_TOKEN");
+  });
+
+  test("buildApiRequest returns correct Anthropic structure", () => {
+    const req = buildApiRequest("anthropic", "sk-ant-test", "claude-sonnet-4-20250514", "system prompt", "user prompt");
+    expect(req.url).toBe("https://api.anthropic.com/v1/messages");
+    expect(req.headers["x-api-key"]).toBe("sk-ant-test");
+    expect(req.headers["anthropic-version"]).toBe("2023-06-01");
+    expect((req.body as any).model).toBe("claude-sonnet-4-20250514");
+    expect((req.body as any).system).toBe("system prompt");
+    expect((req.body as any).messages[0].content).toBe("user prompt");
+  });
+
+  test("buildApiRequest returns correct GitHub Models structure", () => {
+    const req = buildApiRequest("github-copilot", "ghp_token", "claude-sonnet-4-20250514", "system prompt", "user prompt");
+    expect(req.url).toBe("https://models.github.ai/inference/chat/completions");
+    expect(req.headers["Authorization"]).toBe("Bearer ghp_token");
+    expect((req.body as any).model).toBe("claude-sonnet-4-20250514");
+    expect((req.body as any).messages).toHaveLength(2);
+    expect((req.body as any).messages[0].role).toBe("system");
+    expect((req.body as any).messages[1].role).toBe("user");
+  });
+
+  test("parseApiResponse extracts Anthropic text and usage", () => {
+    const json = {
+      content: [{ type: "text", text: "response text" }],
+      usage: { input_tokens: 100, output_tokens: 50 },
+    };
+    const result = parseApiResponse("anthropic", json);
+    expect(result.text).toBe("response text");
+    expect(result.inputTokens).toBe(100);
+    expect(result.outputTokens).toBe(50);
+  });
+
+  test("parseApiResponse extracts GitHub Models text and usage", () => {
+    const json = {
+      choices: [{ message: { content: "response text" } }],
+      usage: { prompt_tokens: 100, completion_tokens: 50 },
+    };
+    const result = parseApiResponse("github-copilot", json);
+    expect(result.text).toBe("response text");
+    expect(result.inputTokens).toBe(100);
+    expect(result.outputTokens).toBe(50);
+  });
+
+  test("parseApiResponse throws on missing Anthropic text", () => {
+    expect(() => parseApiResponse("anthropic", { content: [], usage: {} })).toThrow();
+  });
+
+  test("parseApiResponse throws on missing GitHub Models content", () => {
+    expect(() => parseApiResponse("github-copilot", { choices: [], usage: {} })).toThrow();
   });
 });

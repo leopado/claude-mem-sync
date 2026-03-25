@@ -8,7 +8,7 @@ pipelines:
           name: Merge developer memories
           image: oven/bun:latest
           script:
-            - bun install -g claude-mem-sync
+            - bun install -g @lopadova/claude-mem-sync
             - mem-sync ci-merge
                 --contributions-dir contributions/
                 --output-dir merged/
@@ -31,7 +31,7 @@ pipelines:
               includePaths:
                 - "contributions/**/*.json"
           script:
-            - bun install -g claude-mem-sync
+            - bun install -g @lopadova/claude-mem-sync
             - mem-sync ci-merge
                 --contributions-dir contributions/
                 --output-dir merged/

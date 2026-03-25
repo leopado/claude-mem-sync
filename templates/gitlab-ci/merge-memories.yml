@@ -12,7 +12,7 @@ merge-memories:
         - contributions/**/*.json
     - when: manual
   script:
-    - bun install -g claude-mem-sync
+    - bun install -g @lopadova/claude-mem-sync
     - mem-sync ci-merge
         --contributions-dir contributions/
         --output-dir merged/
