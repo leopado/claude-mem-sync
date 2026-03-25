@@ -37,8 +37,26 @@ export default async function run(args: ParsedArgs): Promise<void> {
     }
 
     const raw = readFileSync(CONFIG_PATH, "utf-8");
-    const config: Config = JSON.parse(raw);
+    let parsedConfig: unknown;
+    try {
+      parsedConfig = JSON.parse(raw);
+    } catch (err) {
+      console.error(`Failed to parse config file at ${CONFIG_PATH}: ${(err as Error).message}`);
+      process.exit(1);
+    }
 
+    if (
+      !parsedConfig ||
+      typeof parsedConfig !== "object" ||
+      !("projects" in parsedConfig) ||
+      typeof (parsedConfig as any).projects !== "object" ||
+      (parsedConfig as any).projects === null
+    ) {
+      console.error(`Invalid config format in ${CONFIG_PATH}: missing or invalid "projects" object.`);
+      process.exit(1);
+    }
+
+    const config: Config = parsedConfig as Config;
     // Determine project name
     let projectName = args.project || "";
     if (!projectName) {
