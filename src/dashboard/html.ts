@@ -137,6 +137,8 @@ var g=Q("#pj");g.innerHTML="";(d.projects||[]).forEach(function(p){
 });
 Q("#hl").innerHTML="<div class='hii'><span class='dot ak'></span> Hook: "+(d.evictionStrategy==="hook"?"Active":"Passive")+"</div><div class='hii'>&#x1F6E1; "+(d.evictionStrategy||"passive")+"</div><div class='hii'>&#x1F4BE; "+S(d.dbSize||0)+"</div><div class='hii'>&#x1F4CA; "+S(d.accessDbSize||0)+"</div>";
 var sl=Q("#op");sl.innerHTML="<option value=''>All Projects</option>";(d.projects||[]).forEach(function(p){sl.innerHTML+="<option>"+p.name+"</option>"});
+var sf=Q("#sf-proj");sf.innerHTML="<option value=''>All Projects</option>";(d.projects||[]).forEach(function(p){sf.innerHTML+="<option>"+p.name+"</option>"});
+var pf=Q("#pf-proj");pf.innerHTML="<option value=''>All Projects</option>";(d.projects||[]).forEach(function(p){pf.innerHTML+="<option>"+p.name+"</option>"});
 })}
 
 function LO(){var s=Q("#os").value,t=Q("#ot").value,p=Q("#op").value,q=new URLSearchParams({page:P,limit:L});

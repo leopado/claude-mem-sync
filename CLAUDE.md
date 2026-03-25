@@ -73,7 +73,10 @@ src/
       distillation-system.ts — System + user prompt templates for distillation
   commands/
     init.ts               — Interactive setup wizard
+    config.ts             — Show current configuration
     setup-repo.ts         — Scaffold a shared team memory repository
+    add-project.ts        — Add a new project to existing config
+    update-project.ts     — Update an existing project's config
     export.ts             — Export filtered memories to git
     import.ts             — Import merged memories into local DB
     preview.ts            — Dry-run export preview
@@ -109,7 +112,10 @@ tests/
 | Command | Description |
 |---------|-------------|
 | `mem-sync init` | Interactive setup wizard |
+| `mem-sync config` | Show current configuration |
 | `mem-sync setup-repo [name]` | Scaffold a shared team memory repository |
+| `mem-sync add-project` | Add a new project to existing config |
+| `mem-sync update-project [--project X]` | Update an existing project's config |
 | `mem-sync export [--project X] [--all] [--dry-run]` | Export filtered memories to git |
 | `mem-sync import [--project X] [--all]` | Import merged memories from git |
 | `mem-sync preview [--project X]` | Dry-run: show what would be exported |

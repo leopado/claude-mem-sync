@@ -23,13 +23,12 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Configure GitHub Packages registry
-        run: |
-          echo "@lopadova:registry=https://npm.pkg.github.com" >> ~/.npmrc
-          echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" >> ~/.npmrc
-
       - name: Install claude-mem-sync
-        run: bun install -g @lopadova/claude-mem-sync
+        run: |
+          git clone --depth 1 https://github.com/lopadova/claude-mem-sync.git /tmp/claude-mem-sync
+          cd /tmp/claude-mem-sync && bun install && bun run build
+          chmod +x /tmp/claude-mem-sync/dist/cli.js
+          sudo ln -sf /tmp/claude-mem-sync/dist/cli.js /usr/local/bin/mem-sync
 
       - name: Merge new contributions
         run: |

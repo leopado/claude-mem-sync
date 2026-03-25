@@ -26,13 +26,12 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Configure GitHub Packages registry
-        run: |
-          echo "@lopadova:registry=https://npm.pkg.github.com" >> ~/.npmrc
-          echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" >> ~/.npmrc
-
       - name: Install claude-mem-sync
-        run: bun install -g @lopadova/claude-mem-sync
+        run: |
+          git clone --depth 1 https://github.com/lopadova/claude-mem-sync.git /tmp/claude-mem-sync
+          cd /tmp/claude-mem-sync && bun install && bun run build
+          chmod +x /tmp/claude-mem-sync/dist/cli.js
+          sudo ln -sf /tmp/claude-mem-sync/dist/cli.js /usr/local/bin/mem-sync
 
       - name: Run knowledge distillation
         env:
@@ -73,7 +72,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          BRANCH="distill/$(date +%Y-%m-%d)"
+          BRANCH="distill/$(date +%Y-%m-%d-%H%M%S)"
           git config user.name "mem-sync-bot"
           git config user.email "mem-sync-bot@users.noreply.github.com"
           git checkout -b "$BRANCH"
