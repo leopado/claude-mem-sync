@@ -1,8 +1,9 @@
 import { createInterface } from "readline";
-import { existsSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, writeFileSync } from "fs";
 import type { ParsedArgs } from "../cli";
 import { CONFIG_PATH, DEFAULT_EXPORT_SCHEDULE, PACKAGE_VERSION } from "../core/constants";
-import type { Config, ProjectConfig } from "../types/config";
+import { loadConfig } from "../core/config";
+import type { ProjectConfig } from "../types/config";
 
 const rl = createInterface({ input: process.stdin, output: process.stdout });
 
@@ -36,8 +37,13 @@ export default async function run(_args: ParsedArgs): Promise<void> {
       process.exit(1);
     }
 
-    const raw = readFileSync(CONFIG_PATH, "utf-8");
-    const config: Config = JSON.parse(raw);
+    let config;
+    try {
+      config = loadConfig();
+    } catch (err) {
+      console.error(`Failed to load config: ${(err as Error).message}`);
+      process.exit(1);
+    }
 
     // Project name
     let projectName = "";

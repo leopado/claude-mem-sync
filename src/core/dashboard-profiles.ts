@@ -1,7 +1,9 @@
 import { join } from "path";
+import { tmpdir } from "os";
 import { existsSync, readFileSync, readdirSync, statSync } from "fs";
 import type { ServerResponse } from "node:http";
 import type { SqliteDatabase } from "./compat";
+import { sha256 } from "./compat";
 import type { Config } from "../types/config";
 import {
   loadContributions,
@@ -11,7 +13,7 @@ import {
   generateTeamConcepts,
   getDevNames,
 } from "./profiler";
-import { shallowClone } from "./git";
+import { cloneOrPull } from "./git";
 import { logger } from "./logger";
 
 function sendJson(res: ServerResponse, data: unknown, status = 200): void {
@@ -46,13 +48,9 @@ async function resolveRepoDir(config: Config, project: string): Promise<string> 
     return ".";
   }
 
-  // Check cache
+  // Check in-memory cache (avoids repeated git pull within the same process run)
   if (repoCache[project]) {
-    const cachedDir = repoCache[project];
-    if (existsSync(cachedDir)) {
-      return cachedDir;
-    }
-    delete repoCache[project];
+    return repoCache[project];
   }
 
   // Clone the repo (if configured)
@@ -64,8 +62,12 @@ async function resolveRepoDir(config: Config, project: string): Promise<string> 
     return ".";
   }
 
-  logger.info("Cloning repo for dashboard profiles", { project, repo: projConfig.remote.repo });
-  const repoDir = await shallowClone(projConfig.remote);
+  // Use a deterministic directory per remote repo so clones accumulate.
+  // If the directory already exists, git pull refreshes it; otherwise we clone fresh.
+  const dirHash = sha256(`${projConfig.remote.type}:${projConfig.remote.repo}`).slice(0, 32);
+  const repoDir = join(tmpdir(), `claude-mem-sync-${dirHash}`);
+  logger.info("Syncing repo for dashboard profiles", { project, repo: projConfig.remote.repo, dir: repoDir });
+  await cloneOrPull(projConfig.remote, repoDir);
   repoCache[project] = repoDir;
   return repoDir;
 }
