@@ -1,6 +1,7 @@
 import { tmpdir } from "os";
 import { join } from "path";
 import { randomBytes } from "crypto";
+import { existsSync, rmSync } from "fs";
 import { spawnCommand } from "./compat";
 import { logger } from "./logger";
 import type { RemoteConfig } from "../types/config";
@@ -55,6 +56,37 @@ export async function shallowClone(remote: RemoteConfig): Promise<string> {
 
   logger.info("Clone complete", { dest: tempDir });
   return tempDir;
+}
+
+/**
+ * Clone a repo into a specific directory, or pull latest if it already exists.
+ * Use this instead of shallowClone when a deterministic target directory is needed
+ * (e.g. dashboard caching), to prevent accumulation of orphaned temp directories.
+ */
+export async function cloneOrPull(remote: RemoteConfig, targetDir: string): Promise<string> {
+  if (existsSync(join(targetDir, ".git"))) {
+    try {
+      logger.info("Pulling latest changes into existing clone", { targetDir });
+      await runCommand(["git", "pull"], { cwd: targetDir });
+    } catch (pullErr) {
+      // Pull failed (e.g., corrupted clone or remote URL changed). Remove and re-clone.
+      logger.warn("git pull failed, falling back to fresh clone", {
+        targetDir,
+        error: (pullErr as Error).message,
+      });
+      rmSync(targetDir, { recursive: true, force: true });
+      const url = buildCloneUrl(remote);
+      logger.info("Shallow-cloning repo (retry)", { provider: remote.type, repo: remote.repo, dest: targetDir });
+      await runCommand(["git", "clone", "--depth", "1", "--branch", remote.branch, url, targetDir]);
+      logger.info("Clone complete", { dest: targetDir });
+    }
+  } else {
+    const url = buildCloneUrl(remote);
+    logger.info("Shallow-cloning repo", { provider: remote.type, repo: remote.repo, dest: targetDir });
+    await runCommand(["git", "clone", "--depth", "1", "--branch", remote.branch, url, targetDir]);
+    logger.info("Clone complete", { dest: targetDir });
+  }
+  return targetDir;
 }
 
 export async function gitPull(repoDir: string): Promise<void> {
