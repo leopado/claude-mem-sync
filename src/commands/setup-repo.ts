@@ -154,7 +154,8 @@ export default async function run(args: ParsedArgs): Promise<void> {
     // 10. Git init + commit
     if (!existsSync(join(targetDir, ".git"))) {
       await spawnCommand(["git", "init"], { cwd: targetDir });
-      console.log("  Initialized git repo");
+      await spawnCommand(["git", "branch", "-M", "main"], { cwd: targetDir });
+      console.log("  Initialized git repo (branch: main)");
     }
     await spawnCommand(["git", "add", "-A"], { cwd: targetDir });
     await spawnCommand(

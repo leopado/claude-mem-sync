@@ -414,7 +414,7 @@ type RouteHandler = (
   config: ReturnType<typeof loadConfig>,
   query: Record<string, string>,
   res: ServerResponse,
-) => void;
+) => void | Promise<void>;
 
 const ROUTES: Record<string, RouteHandler> = {
   "/api/overview": handleOverview,
@@ -492,7 +492,13 @@ export async function startDashboardServer(port: number): Promise<void> {
     const handler = ROUTES[pathname];
     if (handler) {
       try {
-        handler(memDb, accessDb, config, query, res);
+        const result = handler(memDb, accessDb, config, query, res);
+        if (result instanceof Promise) {
+          result.catch((err: unknown) => {
+            const message = err instanceof Error ? err.message : String(err);
+            if (!res.headersSent) sendError(res, message, 500);
+          });
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         sendError(res, message, 500);
@@ -515,12 +521,10 @@ export async function startDashboardServer(port: number): Promise<void> {
     // Dynamic route: /api/profiles/:devName
     const profileMatch = pathname.match(/^\/api\/profiles\/([^/]+)$/);
     if (profileMatch && profileMatch[1] !== "devs") {
-      try {
-        handleProfileDev(memDb, accessDb, config, query, res, decodeURIComponent(profileMatch[1]));
-      } catch (err) {
+      handleProfileDev(memDb, accessDb, config, query, res, decodeURIComponent(profileMatch[1])).catch((err: unknown) => {
         const message = err instanceof Error ? err.message : String(err);
-        sendError(res, message, 500);
-      }
+        if (!res.headersSent) sendError(res, message, 500);
+      });
       return;
     }
 

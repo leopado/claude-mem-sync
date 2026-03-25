@@ -11,6 +11,8 @@ import {
   generateTeamConcepts,
   getDevNames,
 } from "./profiler";
+import { shallowClone } from "./git";
+import { logger } from "./logger";
 
 function sendJson(res: ServerResponse, data: unknown, status = 200): void {
   const body = JSON.stringify(data);
@@ -27,128 +29,196 @@ function sendError(res: ServerResponse, message: string, status = 500): void {
   sendJson(res, { error: message }, status);
 }
 
+// Cache of cloned repo directories per project
+const repoCache: Record<string, string> = {};
+
+/**
+ * Resolve the base directory for a project's contributions/merged/profiles.
+ * Checks CWD first (for when dashboard is run from repo dir or CI).
+ * Falls back to cloning the remote repo.
+ */
+async function resolveRepoDir(config: Config, project: string): Promise<string> {
+  // Check if contributions exist in CWD (user is in the repo dir)
+  const cwdContribs = join("contributions", project);
+  const cwdMerged = join("merged", project);
+  const cwdProfiles = join("profiles", project);
+  if (existsSync(cwdContribs) || existsSync(cwdMerged) || existsSync(cwdProfiles)) {
+    return ".";
+  }
+
+  // Check cache
+  if (repoCache[project]) {
+    const cachedDir = repoCache[project];
+    if (existsSync(cachedDir)) {
+      return cachedDir;
+    }
+    delete repoCache[project];
+  }
+
+  // Clone the repo
+  const projConfig = config.projects[project];
+  if (!projConfig?.remote) {
+    throw new Error(`No remote configured for project "${project}"`);
+  }
+
+  logger.info("Cloning repo for dashboard profiles", { project, repo: projConfig.remote.repo });
+  const repoDir = await shallowClone(projConfig.remote);
+  repoCache[project] = repoDir;
+  return repoDir;
+}
+
 /**
  * Try to load a pre-generated profile from profiles/{project}/{devName}/profile.json.
  * Falls back to live computation from contribution files.
  */
-export function handleProfileDev(
+export async function handleProfileDev(
   _memDb: SqliteDatabase,
   _accessDb: SqliteDatabase,
   config: Config,
   query: Record<string, string>,
   res: ServerResponse,
   devName: string,
-): void {
+): Promise<void> {
   const project = query.project || Object.keys(config.projects)[0] || "";
   if (!project) {
     sendError(res, "No project specified", 400);
     return;
   }
 
-  // Try pre-generated profile first
-  const profilePath = join("profiles", project, devName, "profile.json");
-  if (existsSync(profilePath)) {
-    try {
-      const data = JSON.parse(readFileSync(profilePath, "utf-8"));
-      sendJson(res, data);
+  try {
+    const repoDir = await resolveRepoDir(config, project);
+
+    // Try pre-generated profile first
+    const profilePath = join(repoDir, "profiles", project, devName, "profile.json");
+    if (existsSync(profilePath)) {
+      try {
+        const data = JSON.parse(readFileSync(profilePath, "utf-8"));
+        sendJson(res, data);
+        return;
+      } catch { /* fall through to live computation */ }
+    }
+
+    // Live computation from contribution files
+    const contributionsDir = join(repoDir, "contributions");
+    const mergedDir = join(repoDir, "merged");
+    const contributions = loadContributions(contributionsDir, project);
+
+    if (contributions.length === 0) {
+      sendError(res, `No contributions found for project "${project}"`, 404);
       return;
-    } catch { /* fall through to live computation */ }
+    }
+
+    const mergedObs = loadMergedObservations(mergedDir, project);
+    const profile = generateProfile(devName, project, contributions, mergedObs, contributions);
+    sendJson(res, profile);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    sendError(res, message, 500);
   }
-
-  // Live computation from contribution files
-  const contributionsDir = "contributions";
-  const mergedDir = "merged";
-  const contributions = loadContributions(contributionsDir, project);
-
-  if (contributions.length === 0) {
-    sendError(res, `No contributions found for project "${project}"`, 404);
-    return;
-  }
-
-  const mergedObs = loadMergedObservations(mergedDir, project);
-  const profile = generateProfile(devName, project, contributions, mergedObs, contributions);
-  sendJson(res, profile);
 }
 
-export function handleProfileDevs(
+export async function handleProfileDevs(
   _memDb: SqliteDatabase,
   _accessDb: SqliteDatabase,
   config: Config,
   query: Record<string, string>,
   res: ServerResponse,
-): void {
+): Promise<void> {
   const project = query.project || Object.keys(config.projects)[0] || "";
 
-  // Try pre-generated profiles dir
-  const profilesDir = join("profiles", project);
-  if (existsSync(profilesDir)) {
-    try {
-      const devDirs = readdirSync(profilesDir).filter((name) => {
-        const full = join(profilesDir, name);
-        return statSync(full).isDirectory();
-      });
-      sendJson(res, { devNames: devDirs.sort(), project });
-      return;
-    } catch { /* fall through */ }
-  }
+  try {
+    const repoDir = await resolveRepoDir(config, project);
 
-  // Discover from contributions
-  const contributions = loadContributions("contributions", project);
-  const devNames = getDevNames(contributions);
-  sendJson(res, { devNames, project });
+    // Try pre-generated profiles dir
+    const profilesDir = join(repoDir, "profiles", project);
+    if (existsSync(profilesDir)) {
+      try {
+        const devDirs = readdirSync(profilesDir).filter((name) => {
+          const full = join(profilesDir, name);
+          return statSync(full).isDirectory();
+        });
+        if (devDirs.length > 0) {
+          sendJson(res, { devNames: devDirs.sort(), project });
+          return;
+        }
+      } catch { /* fall through */ }
+    }
+
+    // Discover from contributions
+    const contributions = loadContributions(join(repoDir, "contributions"), project);
+    const devNames = getDevNames(contributions);
+    sendJson(res, { devNames, project });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    sendError(res, message, 500);
+  }
 }
 
-export function handleTeamOverview(
+export async function handleTeamOverview(
   _memDb: SqliteDatabase,
   _accessDb: SqliteDatabase,
   config: Config,
   query: Record<string, string>,
   res: ServerResponse,
-): void {
+): Promise<void> {
   const project = query.project || Object.keys(config.projects)[0] || "";
 
-  // Try pre-generated team overview
-  const overviewPath = join("profiles", project, "team-overview.json");
-  if (existsSync(overviewPath)) {
-    try {
-      const data = JSON.parse(readFileSync(overviewPath, "utf-8"));
-      sendJson(res, data);
+  try {
+    const repoDir = await resolveRepoDir(config, project);
+
+    // Try pre-generated team overview
+    const overviewPath = join(repoDir, "profiles", project, "team-overview.json");
+    if (existsSync(overviewPath)) {
+      try {
+        const data = JSON.parse(readFileSync(overviewPath, "utf-8"));
+        sendJson(res, data);
+        return;
+      } catch { /* fall through */ }
+    }
+
+    // Live computation
+    const contributions = loadContributions(join(repoDir, "contributions"), project);
+    if (contributions.length === 0) {
+      sendJson(res, { totalDevs: 0, avgObservationsPerDev: 0, avgSurvivalRate: 0, avgConceptDiversity: 0, typeDistribution: [] });
       return;
-    } catch { /* fall through */ }
+    }
+
+    const mergedObs = loadMergedObservations(join(repoDir, "merged"), project);
+    const devNames = getDevNames(contributions);
+    const profiles = devNames.map((name) =>
+      generateProfile(name, project, contributions, mergedObs, contributions),
+    );
+
+    const overview = generateTeamOverview(project, profiles, contributions);
+    sendJson(res, overview);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    sendError(res, message, 500);
   }
-
-  // Live computation
-  const contributions = loadContributions("contributions", project);
-  if (contributions.length === 0) {
-    sendJson(res, { totalDevs: 0, avgObservationsPerDev: 0, avgSurvivalRate: 0, avgConceptDiversity: 0, typeDistribution: [] });
-    return;
-  }
-
-  const mergedObs = loadMergedObservations("merged", project);
-  const devNames = getDevNames(contributions);
-  const profiles = devNames.map((name) =>
-    generateProfile(name, project, contributions, mergedObs, contributions),
-  );
-
-  const overview = generateTeamOverview(project, profiles, contributions);
-  sendJson(res, overview);
 }
 
-export function handleTeamConcepts(
+export async function handleTeamConcepts(
   _memDb: SqliteDatabase,
   _accessDb: SqliteDatabase,
   config: Config,
   query: Record<string, string>,
   res: ServerResponse,
-): void {
+): Promise<void> {
   const project = query.project || Object.keys(config.projects)[0] || "";
-  const contributions = loadContributions("contributions", project);
 
-  if (contributions.length === 0) {
-    sendJson(res, { project, concepts: [], knowledgeGaps: [] });
-    return;
+  try {
+    const repoDir = await resolveRepoDir(config, project);
+    const contributions = loadContributions(join(repoDir, "contributions"), project);
+
+    if (contributions.length === 0) {
+      sendJson(res, { project, concepts: [], knowledgeGaps: [] });
+      return;
+    }
+
+    const result = generateTeamConcepts(project, contributions);
+    sendJson(res, result);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    sendError(res, message, 500);
   }
-
-  const result = generateTeamConcepts(project, contributions);
-  sendJson(res, result);
 }

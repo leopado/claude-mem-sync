@@ -1,5 +1,5 @@
 import { join } from "path";
-import { mkdirSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, writeFileSync } from "fs";
 import { loadConfig, getEnabledProjects } from "../core/config";
 import { logger } from "../core/logger";
 import {
@@ -10,6 +10,7 @@ import {
   getDevNames,
   renderProfileMarkdown,
 } from "../core/profiler";
+import { shallowClone } from "../core/git";
 import type { ParsedArgs } from "../cli";
 
 export default async function run(args: ParsedArgs): Promise<void> {
@@ -37,7 +38,23 @@ export default async function run(args: ParsedArgs): Promise<void> {
 
   for (const project of projectNames) {
     try {
-      await profileProject(project, contributionsDir, mergedDir, profilesDir, devFilter, format, args.dryRun);
+      // If contributions don't exist locally, clone the remote repo
+      let effectiveContribDir = contributionsDir;
+      let effectiveMergedDir = mergedDir;
+      let effectiveProfilesDir = profilesDir;
+
+      if (!existsSync(join(contributionsDir, project)) && !args.contributionsDir) {
+        const projConfig = config.projects[project];
+        if (projConfig?.remote) {
+          logger.info(`Contributions not found locally, cloning repo for "${project}"...`);
+          const repoDir = await shallowClone(projConfig.remote);
+          effectiveContribDir = join(repoDir, "contributions");
+          effectiveMergedDir = join(repoDir, "merged");
+          effectiveProfilesDir = join(repoDir, "profiles");
+        }
+      }
+
+      await profileProject(project, effectiveContribDir, effectiveMergedDir, effectiveProfilesDir, devFilter, format, args.dryRun);
     } catch (err) {
       logger.error(`Profile generation failed for "${project}"`, { error: String(err) });
     }
