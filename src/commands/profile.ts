@@ -50,7 +50,7 @@ export default async function run(args: ParsedArgs): Promise<void> {
           const repoDir = await shallowClone(projConfig.remote);
           effectiveContribDir = join(repoDir, "contributions");
           effectiveMergedDir = join(repoDir, "merged");
-          effectiveProfilesDir = join(repoDir, "profiles");
+          // Keep profile output in the current working directory's profiles/ dir.
         }
       }
 
