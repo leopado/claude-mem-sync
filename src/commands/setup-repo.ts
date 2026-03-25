@@ -193,7 +193,7 @@ export default async function run(args: ParsedArgs): Promise<void> {
           const apiKey = await ask(secretPrompt);
           if (apiKey) {
             const secretResult = await spawnCommand(
-              ["gh", "secret", "set", secretName, "--repo", repoName, "--body", apiKey],
+              ["gh", "secret", "set", secretName, "--body", apiKey],
               { cwd: targetDir },
             );
             if (secretResult.exitCode === 0) {
