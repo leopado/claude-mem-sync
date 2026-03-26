@@ -307,7 +307,7 @@ export function generateSchtasksCommand(entry: ScheduleEntry): string {
  */
 export function generateSchtasksArgs(entry: ScheduleEntry): string[] {
   const sched = entry.schedule;
-  const tr = `cmd /c "${entry.command} ${entry.args.join(" ")} >> "${entry.logFile}" 2>&1"`;
+  const tr = `cmd /c "${entry.command} ${entry.args.join(" ")} >> ""${entry.logFile}"" 2>&1"`;
   const time = `${String(("hour" in sched ? sched.hour : 0)).padStart(2, "0")}:${String(("minute" in sched ? sched.minute : 0)).padStart(2, "0")}`;
 
   const base = ["/create", "/tn", entry.name, "/tr", tr, "/st", time, "/rl", "LIMITED", "/f"];
