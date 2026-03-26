@@ -746,7 +746,10 @@ claude-mem has no native tag system. Tags like `#shared` and `#keep` work via fr
 | Command | Description |
 |---------|-------------|
 | `mem-sync init` | Interactive setup wizard |
+| `mem-sync config` | Show current configuration |
 | `mem-sync setup-repo [name]` | Scaffold a shared team memory repository |
+| `mem-sync add-project` | Add a new project to existing config |
+| `mem-sync update-project [--project X]` | Update an existing project's config |
 | `mem-sync export [--project X] [--all] [--dry-run]` | Export filtered memories to git |
 | `mem-sync import [--project X] [--all]` | Import merged memories from git |
 | `mem-sync preview [--project X] [--all]` | Dry-run: show what would be exported |

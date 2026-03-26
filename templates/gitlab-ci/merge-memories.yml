@@ -12,7 +12,9 @@ merge-memories:
         - contributions/**/*.json
     - when: manual
   script:
-    - bun install -g @lopadova/claude-mem-sync
+    - git clone --depth 1 https://github.com/lopadova/claude-mem-sync.git /tmp/claude-mem-sync
+    - cd /tmp/claude-mem-sync && bun install && bun run build
+    - 'echo "#!/bin/sh" > /usr/local/bin/mem-sync && echo "exec bun /tmp/claude-mem-sync/dist/cli.js \"\$@\"" >> /usr/local/bin/mem-sync && chmod +x /usr/local/bin/mem-sync'
     - mem-sync ci-merge
         --contributions-dir contributions/
         --output-dir merged/

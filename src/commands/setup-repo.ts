@@ -61,8 +61,8 @@ export default async function run(args: ParsedArgs): Promise<void> {
     let llmProvider: "github-copilot" | "anthropic" = "github-copilot";
     if (addDistillation) {
       console.log("\n  LLM provider options:");
-      console.log("  1) github-copilot  — uses GITHUB_TOKEN, no extra secret needed (recommended)");
-      console.log("  2) anthropic       — requires ANTHROPIC_API_KEY as repo secret\n");
+      console.log("  1) github-copilot  — requires a GitHub PAT with models:read scope");
+      console.log("  2) anthropic       — requires an ANTHROPIC_API_KEY\n");
       const llmAnswer = await ask("LLM provider", "github-copilot");
       llmProvider = llmAnswer === "anthropic" || llmAnswer === "2" ? "anthropic" : "github-copilot";
     }
@@ -119,10 +119,18 @@ export default async function run(args: ParsedArgs): Promise<void> {
           join(templatesDir, "github-action", "distill-knowledge.yml"),
           "utf-8",
         );
-        if (llmProvider === "github-copilot") {
+        if (llmProvider === "anthropic") {
           distillYml = distillYml.replace(
-            "ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}",
             "GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}",
+            "ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}",
+          );
+          distillYml = distillYml.replace(
+            "'provider': 'github-copilot'",
+            "'provider': 'anthropic'",
+          );
+          distillYml = distillYml.replace(
+            "'model': 'gpt-4o'",
+            "'model': 'claude-sonnet-4-20250514'",
           );
         }
         writeFileSync(join(workflowDir, "distill-knowledge.yml"), distillYml, "utf-8");
@@ -154,7 +162,8 @@ export default async function run(args: ParsedArgs): Promise<void> {
     // 10. Git init + commit
     if (!existsSync(join(targetDir, ".git"))) {
       await spawnCommand(["git", "init"], { cwd: targetDir });
-      console.log("  Initialized git repo");
+      await spawnCommand(["git", "branch", "-M", "main"], { cwd: targetDir });
+      console.log("  Initialized git repo (branch: main)");
     }
     await spawnCommand(["git", "add", "-A"], { cwd: targetDir });
     await spawnCommand(
@@ -164,6 +173,7 @@ export default async function run(args: ParsedArgs): Promise<void> {
     console.log("  Created initial commit");
 
     // 11. Create GitHub repo if requested
+    let secretCreated = false;
     if (createOnGitHub) {
       console.log("\n  Creating private GitHub repo...");
       const result = await spawnCommand(
@@ -172,6 +182,28 @@ export default async function run(args: ParsedArgs): Promise<void> {
       );
       if (result.exitCode === 0) {
         console.log("  GitHub repo created and pushed.");
+
+        // 11b. Create distillation secret
+        if (addDistillation) {
+          const secretName = llmProvider === "anthropic" ? "ANTHROPIC_API_KEY" : "GITHUB_TOKEN";
+          const secretPrompt = llmProvider === "anthropic"
+            ? "Enter your ANTHROPIC_API_KEY (will be saved as repo secret)"
+            : "Enter a GitHub PAT with models:read scope (will be saved as repo secret GITHUB_TOKEN)";
+          console.log("");
+          const apiKey = await ask(secretPrompt);
+          if (apiKey) {
+            const secretResult = await spawnCommand(
+              ["gh", "secret", "set", secretName, "--body", apiKey],
+              { cwd: targetDir },
+            );
+            if (secretResult.exitCode === 0) {
+              console.log(`  Secret ${secretName} set successfully.`);
+              secretCreated = true;
+            } else {
+              console.error(`  Warning: failed to set secret: ${secretResult.stderr}`);
+            }
+          }
+        }
       } else {
         console.error(`  Warning: gh repo create failed: ${result.stderr}`);
         console.log("  You can create the repo manually and push later.");
@@ -186,11 +218,13 @@ export default async function run(args: ParsedArgs): Promise<void> {
     console.log(`     Use repo: <owner>/${repoName}`);
     console.log("  3. First export:         mem-sync export --project <name>");
 
-    if (addDistillation && llmProvider === "anthropic") {
-      console.log("\nDistillation requires a repo secret:");
-      console.log(`  gh secret set ANTHROPIC_API_KEY --repo <owner>/${repoName}`);
-    } else if (addDistillation) {
-      console.log("\nDistillation will use GITHUB_TOKEN — no extra secret needed.");
+    if (addDistillation && !secretCreated) {
+      const secretName = llmProvider === "anthropic" ? "ANTHROPIC_API_KEY" : "GITHUB_TOKEN";
+      const secretHint = llmProvider === "anthropic"
+        ? "an Anthropic API key"
+        : "a GitHub PAT with models:read scope";
+      console.log(`\nDistillation requires a repo secret (${secretHint}):`);
+      console.log(`  gh secret set ${secretName} --repo <owner>/${repoName}`);
     }
     console.log("");
   } finally {
