@@ -120,13 +120,19 @@ export async function handleDistilledFeedback(
     req.on("error", reject);
   });
 
-  const data = JSON.parse(body) as {
+  let data: {
     project: string;
     ruleId: string;
     status: "accepted" | "rejected" | "modified";
     modifiedRule?: string;
     reviewedBy?: string;
   };
+  try {
+    data = JSON.parse(body) as typeof data;
+  } catch {
+    sendError(res, "Invalid request body", 400);
+    return;
+  }
 
   if (!data.project || !data.ruleId || !data.status) {
     sendError(res, "Missing required fields: project, ruleId, status", 400);

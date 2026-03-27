@@ -73,7 +73,7 @@ export const DASHBOARD_HTML = `<!DOCTYPE html>
 <div class="cg"><div class="cc"><div class="cti">Type Distribution</div><canvas id="cty"></canvas></div><div class="cc"><div class="cti">Activity Timeline</div><canvas id="ctl"></canvas></div><div class="cc"><div class="cti">Top Observations by Score</div><canvas id="csc"></canvas></div><div class="cc"><div class="cti">Developer Contributions</div><canvas id="cdv"></canvas></div></div></div>
 
 <div id="t-access" class="tc"><div class="pt">Access Map</div>
-<div class="cd"><div class="ct2"><span class="ic">&#x1F525;</span> Access Heatmap (6 months)</div><div id="hmap" class="hm"></div></div>
+<div class="cd"><div class="ct2"><span class="ic">&#x1F525;</span> Access Heatmap (6 months)</div><div id="hmap" class="hm"></div><div id="hmap-msg"></div></div>
 <div class="cd"><div class="ct2"><span class="ic">&#x1F3C6;</span> Most Accessed</div><div class="tw"><table><thead><tr><th>ID</th><th>Type</th><th>Title</th><th>Accesses</th><th>Last</th></tr></thead><tbody id="ttb"></tbody></table></div></div></div>
 
 <div id="t-sync" class="tc"><div class="pt">Sync History</div>
@@ -160,11 +160,11 @@ if(dv&&window.Chart){var x3=dv.contributions||[];if(C.dv)C.dv.destroy();C.dv=new
 })}
 
 function LAC(){Promise.all([F("/api/access/heatmap?months=6"),F("/api/access/top?limit=20")]).then(function(r){
-var hm=r[0],tp=r[1];var el=Q("#hmap"),tip=Q("#htt");el.innerHTML="";
+var hm=r[0],tp=r[1];var el=Q("#hmap"),msg=Q("#hmap-msg"),tip=Q("#htt");el.innerHTML="";msg.innerHTML="";
 if(hm){var m=new Map();var hasData=false;(hm.heatmap||[]).forEach(function(h){m.set(h.date,h.count);if(h.count>0)hasData=true});var end=new Date(),st=new Date();st.setMonth(st.getMonth()-6);
 for(var d=new Date(st);d<=end;d.setDate(d.getDate()+1)){var ds=d.toISOString().slice(0,10),c=m.get(ds)||0,lv=c===0?0:c<=2?1:c<=5?2:c<=10?3:c<=20?4:5;
 var ce=document.createElement("div");ce.className="hc h"+lv;(function(ds2,c2){ce.onmouseenter=function(e){tip.style.display="block";tip.style.left=e.pageX+10+"px";tip.style.top=e.pageY-30+"px";tip.textContent=ds2+": "+c2+" accesses"};ce.onmouseleave=function(){tip.style.display="none"}})(ds,c);el.appendChild(ce)}
-if(!hasData){el.insertAdjacentHTML("afterend","<div style='text-align:center;padding:16px;color:#64748b;font-size:13px'>No access data yet. The PostToolUse hook must be installed to track observation usage.<br>Run <code style='color:#06b6d4'>mem-sync schedule install</code> to set it up.</div>")}}
+if(!hasData){msg.innerHTML="<div style='text-align:center;padding:16px;color:#64748b;font-size:13px'>No access data yet. The PostToolUse hook must be installed to track observation usage.<br>Run <code style=\"color:#06b6d4\">mem-sync schedule install</code> to set it up.</div>"}}
 var tb=Q("#ttb");tb.innerHTML="";(tp||[]).forEach(function(o){var mx=(tp[0]&&tp[0].accessCount)||1,pc=Math.round(o.accessCount/mx*100);
 tb.innerHTML+="<tr><td>#"+o.id+"</td><td><span class='"+BG(o.type)+"'>"+o.type+"</span></td><td>"+o.title+"</td><td><div style='display:flex;align-items:center;gap:8px'><div style='width:60px;height:4px;background:var(--hover);border-radius:2px;overflow:hidden'><div style='width:"+pc+"%;height:100%;background:var(--cyan);border-radius:2px'></div></div>"+o.accessCount+"</div></td><td>"+D(o.lastAccessed)+"</td></tr>"})
 })}

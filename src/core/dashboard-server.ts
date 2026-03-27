@@ -18,6 +18,7 @@ import {
   calculateTypeWeight,
   calculateRecencyWeight,
   calculateScore,
+  hasKeepTag,
 } from "./scoring";
 import {
   handleProfileDev,
@@ -149,7 +150,7 @@ function handleOverview(
 function handleObservations(
   memDb: SqliteDatabase,
   accessDb: SqliteDatabase,
-  _config: ReturnType<typeof loadConfig>,
+  config: ReturnType<typeof loadConfig>,
   query: Record<string, string>,
   res: ServerResponse,
 ): void {
@@ -193,7 +194,27 @@ function handleObservations(
   const nowEpoch = Math.floor(Date.now() / 1000);
   const ids = rows.map((r) => r.id);
   const accessMap = new Map<number, number>();
-  let maxAccess = 0;
+
+  // Compute maxAccess over the full relevant set (whole project or all obs) for consistent normalization
+  const maxAccessRow = project
+    ? (accessDb
+        .prepare(
+          `SELECT COALESCE(MAX(cnt), 0) as maxCnt FROM (
+             SELECT COUNT(*) as cnt FROM access_log
+             WHERE project = ?
+             GROUP BY observation_id
+           )`,
+        )
+        .get(project) as { maxCnt: number })
+    : (accessDb
+        .prepare(
+          `SELECT COALESCE(MAX(cnt), 0) as maxCnt FROM (
+             SELECT COUNT(*) as cnt FROM access_log
+             GROUP BY observation_id
+           )`,
+        )
+        .get() as { maxCnt: number });
+  const maxAccess = maxAccessRow?.maxCnt ?? 0;
 
   if (ids.length > 0) {
     const placeholders = ids.map(() => "?").join(",");
@@ -202,19 +223,23 @@ function handleObservations(
       .all(...ids) as Array<{ observation_id: number; cnt: number }>;
     for (const r of accessRows) {
       accessMap.set(r.observation_id, r.cnt);
-      if (r.cnt > maxAccess) maxAccess = r.cnt;
     }
   }
 
+  const keepTags = config.global.evictionKeepTagged ?? ["#keep"];
+
   const scored = rows.map((row) => {
     const accessCount = accessMap.get(row.id) ?? 0;
-    const score = calculateScore({
+    let score = calculateScore({
       typeWeight: calculateTypeWeight(row.type),
       recencyWeight: calculateRecencyWeight(row.created_at_epoch, nowEpoch),
       accessWeight: maxAccess > 0 ? accessCount / maxAccess : 0,
       weights: { typeWeight: 0.3, recencyWeight: 0.2, thirdWeight: 0.5 },
       mode: "hook",
     });
+    if (hasKeepTag(row, keepTags)) {
+      score = Math.max(score, 1.0);
+    }
     return { ...row, score: Math.round(score * 1000) / 1000 };
   });
 
